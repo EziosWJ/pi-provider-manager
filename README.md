@@ -17,12 +17,12 @@ Interactive provider and model manager for [pi coding agent](https://github.com/
 
 ```bash
 curl -o ~/.pi/agent/extensions/provider-manager.ts \
-  https://raw.githubusercontent.com/wangjian/pi-provider-manager/main/provider-manager.ts
+  https://raw.githubusercontent.com/EziosWJ/pi-provider-manager/main/provider-manager.ts
 ```
 
 ### Manual
 
-1. Download [provider-manager.ts](https://raw.githubusercontent.com/wangjian/pi-provider-manager/main/provider-manager.ts)
+1. Download [provider-manager.ts](https://raw.githubusercontent.com/EziosWJ/pi-provider-manager/main/provider-manager.ts)
 2. Place it in `~/.pi/agent/extensions/` (global) or `.pi/extensions/` (project-local)
 3. Restart pi or run `/reload`
 
@@ -171,7 +171,7 @@ After adding providers and models, restart pi or run `/reload` to refresh the co
 
 ## Contributing
 
-Issues and pull requests welcome at [GitHub](https://github.com/wangjian/pi-provider-manager).
+Issues and pull requests welcome at [GitHub](https://github.com/EziosWJ/pi-provider-manager).
 
 ## License
 

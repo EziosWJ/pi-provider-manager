@@ -1,6 +1,6 @@
 {
   "name": "pi-provider-manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Interactive provider and model manager for pi coding agent",
   "main": "provider-manager.ts",
   "keywords": [
@@ -17,10 +17,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/wangjian/pi-provider-manager.git"
+    "url": "https://github.com/EziosWJ/pi-provider-manager.git"
   },
   "bugs": {
-    "url": "https://github.com/wangjian/pi-provider-manager/issues"
+    "url": "https://github.com/EziosWJ/pi-provider-manager/issues"
   },
-  "homepage": "https://github.com/wangjian/pi-provider-manager#readme"
+  "homepage": "https://github.com/EziosWJ/pi-provider-manager#readme"
 }
