@@ -1,6 +1,6 @@
 # Pi Provider Manager
 
-[English](README.md) | 简体中文
+[English](README.md) | 简体中文 | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md)
 
 交互式 provider 和 model 管理器，用于 [pi coding agent](https://github.com/earendil-works/pi-mono)。
 
