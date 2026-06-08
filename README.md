@@ -1,5 +1,7 @@
 # Pi Provider Manager
 
+English | [简体中文](README.zh-CN.md)
+
 Interactive provider and model manager for [pi coding agent](https://github.com/earendil-works/pi-mono).
 
 ## Features
