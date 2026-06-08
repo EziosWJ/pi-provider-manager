@@ -1,0 +1,26 @@
+{
+  "name": "pi-provider-manager",
+  "version": "1.0.0",
+  "description": "Interactive provider and model manager for pi coding agent",
+  "main": "provider-manager.ts",
+  "keywords": [
+    "pi",
+    "pi-coding-agent",
+    "extension",
+    "provider",
+    "model",
+    "ollama",
+    "llm",
+    "local-models"
+  ],
+  "author": "wangjian",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wangjian/pi-provider-manager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wangjian/pi-provider-manager/issues"
+  },
+  "homepage": "https://github.com/wangjian/pi-provider-manager#readme"
+}
