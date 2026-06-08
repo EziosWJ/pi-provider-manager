@@ -10,17 +10,10 @@ interface ModelConfig {
   input?: string[];
   contextWindow?: number;
   maxTokens?: number;
-  cost?: {
-    input?: number;
-    output?: number;
-    cacheRead?: number;
-    cacheWrite?: number;
-  };
   compat?: {
     supportsDeveloperRole?: boolean;
     supportsReasoningEffort?: boolean;
   };
-  thinkingLevelMap?: Record<string, string>;
 }
 
 interface Provider {
@@ -39,11 +32,40 @@ interface ModelsConfig {
 }
 
 const CONFIG_PATH = path.join(os.homedir(), ".pi", "agent", "models.json");
-const BACKUP_PATH = path.join(os.homedir(), ".pi", "agent", "models.json.backup");
+const BACKUP_DIR = path.join(os.homedir(), ".pi", "agent", "backups");
+const MAX_BACKUPS = 10;
 
 function backupConfig(): void {
-  if (fs.existsSync(CONFIG_PATH)) {
-    fs.copyFileSync(CONFIG_PATH, BACKUP_PATH);
+  if (!fs.existsSync(CONFIG_PATH)) {
+    return;
+  }
+
+  // Create backup directory if it doesn't exist
+  if (!fs.existsSync(BACKUP_DIR)) {
+    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  }
+
+  // Generate timestamped backup filename
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[:.]/g, "-")
+    .replace("T", "-")
+    .slice(0, 19); // YYYY-MM-DD-HH-MM-SS
+  const backupPath = path.join(BACKUP_DIR, `models.json.backup.${timestamp}`);
+
+  // Copy current config to timestamped backup
+  fs.copyFileSync(CONFIG_PATH, backupPath);
+
+  // Clean up old backups (keep only MAX_BACKUPS most recent)
+  const backups = fs
+    .readdirSync(BACKUP_DIR)
+    .filter((f) => f.startsWith("models.json.backup."))
+    .sort()
+    .reverse(); // Most recent first
+
+  // Remove old backups beyond MAX_BACKUPS
+  for (let i = MAX_BACKUPS; i < backups.length; i++) {
+    fs.unlinkSync(path.join(BACKUP_DIR, backups[i]));
   }
 }
 
@@ -81,26 +103,110 @@ async function testProviderConnection(
   baseUrl: string,
   apiKey: string,
   api: string
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; details?: string }> {
   try {
     // Test basic connectivity
     const url = new URL(baseUrl);
+    let testResults: string[] = [];
 
-    // For OpenAI-compatible APIs, try /models endpoint
+    // For OpenAI-compatible APIs, test multiple endpoints
     if (api === "openai-completions") {
-      const response = await fetch(`${baseUrl}/models`, {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-        signal: AbortSignal.timeout(5000),
-      });
+      // Test 1: /models endpoint
+      try {
+        const modelsResponse = await fetch(`${baseUrl}/models`, {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+          signal: AbortSignal.timeout(5000),
+        });
 
-      if (response.ok) {
-        return { success: true, message: "Connection successful" };
+        if (modelsResponse.ok) {
+          testResults.push("✓ /models endpoint: OK");
+        } else if (modelsResponse.status === 401 || modelsResponse.status === 403) {
+          return {
+            success: false,
+            message: "Authentication failed",
+            details: `HTTP ${modelsResponse.status}: Check your API key`,
+          };
+        } else if (modelsResponse.status === 404) {
+          testResults.push("✗ /models endpoint: Not found (might not be supported)");
+        } else {
+          testResults.push(`⚠ /models endpoint: HTTP ${modelsResponse.status}`);
+        }
+      } catch (error: any) {
+        if (error.name === "AbortError") {
+          return {
+            success: false,
+            message: "Connection timeout",
+            details: "Server did not respond within 5 seconds",
+          };
+        }
+        return {
+          success: false,
+          message: "Network error",
+          details: error.message || "Cannot reach server",
+        };
+      }
+
+      // Test 2: Chat completion endpoint
+      try {
+        const chatResponse = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "test",
+            messages: [{ role: "user", content: "test" }],
+            max_tokens: 1,
+          }),
+          signal: AbortSignal.timeout(5000),
+        });
+
+        // We expect either 200 (success) or 404 (model not found), both indicate the endpoint works
+        if (chatResponse.ok) {
+          testResults.push("✓ /chat/completions: OK");
+        } else if (chatResponse.status === 404) {
+          testResults.push("✓ /chat/completions: Endpoint available (test model not found)");
+        } else if (chatResponse.status === 401 || chatResponse.status === 403) {
+          return {
+            success: false,
+            message: "Authentication failed on chat endpoint",
+            details: `HTTP ${chatResponse.status}: Check your API key`,
+          };
+        } else {
+          testResults.push(`⚠ /chat/completions: HTTP ${chatResponse.status}`);
+        }
+      } catch (error: any) {
+        if (error.name === "AbortError") {
+          testResults.push("⚠ /chat/completions: Timeout");
+        } else {
+          testResults.push("⚠ /chat/completions: Error");
+        }
+      }
+
+      // Overall assessment
+      const hasModels = testResults.some((r) => r.includes("✓ /models"));
+      const hasChat = testResults.some((r) => r.includes("✓ /chat/completions"));
+
+      if (hasModels && hasChat) {
+        return {
+          success: true,
+          message: "All tests passed",
+          details: testResults.join("\n"),
+        };
+      } else if (hasModels || hasChat) {
+        return {
+          success: true,
+          message: "Partially working",
+          details: testResults.join("\n"),
+        };
       } else {
         return {
           success: false,
-          message: `HTTP ${response.status}: ${response.statusText}`,
+          message: "Connection issues",
+          details: testResults.join("\n"),
         };
       }
     }
@@ -333,9 +439,17 @@ export default function (pi: ExtensionAPI) {
         );
 
         if (result.success) {
-          ctx.ui.notify(`✓ ${result.message}`, "success");
+          let message = `✓ ${result.message}`;
+          if (result.details) {
+            message += `\n\n${result.details}`;
+          }
+          ctx.ui.notify(message, "success");
         } else {
-          ctx.ui.notify(`✗ ${result.message}`, "error");
+          let message = `✗ ${result.message}`;
+          if (result.details) {
+            message += `\n\n${result.details}`;
+          }
+          ctx.ui.notify(message, "error");
         }
 
       } else if (action === "doctor") {
@@ -344,10 +458,24 @@ export default function (pi: ExtensionAPI) {
         const config = loadConfig();
 
         if (config === null) {
+          // List available backups
+          let backupList = "";
+          if (fs.existsSync(BACKUP_DIR)) {
+            const backups = fs
+              .readdirSync(BACKUP_DIR)
+              .filter((f) => f.startsWith("models.json.backup."))
+              .sort()
+              .reverse()
+              .slice(0, 5);
+
+            if (backups.length > 0) {
+              backupList = "\n\nAvailable backups:\n" + backups.map((b) => `  ${b}`).join("\n");
+              backupList += `\n\nTo restore: cp ~/.pi/agent/backups/<backup-file> ~/.pi/agent/models.json`;
+            }
+          }
+
           ctx.ui.notify(
-            "✗ models.json is corrupted or invalid JSON\n\n" +
-            `Backup available at: ${BACKUP_PATH}\n` +
-            "To restore: cp ~/.pi/agent/models.json.backup ~/.pi/agent/models.json",
+            "✗ models.json is corrupted or invalid JSON" + backupList,
             "error"
           );
           return;
@@ -357,8 +485,19 @@ export default function (pi: ExtensionAPI) {
         report += `✓ models.json is valid JSON\n`;
         report += `✓ Location: ${CONFIG_PATH}\n`;
 
-        if (fs.existsSync(BACKUP_PATH)) {
-          report += `✓ Backup exists: ${BACKUP_PATH}\n`;
+        // Show backup info
+        if (fs.existsSync(BACKUP_DIR)) {
+          const backups = fs
+            .readdirSync(BACKUP_DIR)
+            .filter((f) => f.startsWith("models.json.backup."))
+            .sort()
+            .reverse();
+
+          if (backups.length > 0) {
+            report += `✓ Backups: ${backups.length} (keeping ${MAX_BACKUPS} most recent)\n`;
+            report += `  Latest: ${backups[0]}\n`;
+            report += `  Location: ${BACKUP_DIR}\n`;
+          }
         }
 
         const providerCount = Object.keys(config.providers).length;
@@ -384,6 +523,199 @@ export default function (pi: ExtensionAPI) {
 
         ctx.ui.notify(report, "info");
 
+      } else if (action === "import-models") {
+        const config = loadConfig();
+        if (config === null) {
+          ctx.ui.notify("Failed to load models.json", "error");
+          return;
+        }
+
+        const providers = Object.keys(config.providers);
+
+        if (providers.length === 0) {
+          ctx.ui.notify("No providers configured. Add one first with /provider add", "error");
+          return;
+        }
+
+        // Select provider
+        const providerName = await ctx.ui.select(
+          "Select provider to import models from:",
+          providers.map((p) => p)
+        );
+
+        if (!providerName) {
+          ctx.ui.notify("Cancelled", "info");
+          return;
+        }
+
+        const provider = config.providers[providerName];
+
+        // Only works for OpenAI-compatible APIs
+        if (provider.api !== "openai-completions") {
+          ctx.ui.notify(
+            "Model import is only supported for OpenAI-compatible APIs",
+            "error"
+          );
+          return;
+        }
+
+        ctx.ui.notify(`Fetching models from ${providerName}...`, "info");
+
+        // Resolve API key
+        let apiKey = provider.apiKey;
+        if (apiKey.startsWith("$")) {
+          const envVar = apiKey.slice(1);
+          apiKey = process.env[envVar] || "";
+          if (!apiKey) {
+            ctx.ui.notify(
+              `Environment variable ${envVar} is not set`,
+              "error"
+            );
+            return;
+          }
+        }
+
+        // Fetch models
+        try {
+          const response = await fetch(`${provider.baseUrl}/models`, {
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+            },
+            signal: AbortSignal.timeout(10000),
+          });
+
+          if (!response.ok) {
+            ctx.ui.notify(
+              `Failed to fetch models: HTTP ${response.status}`,
+              "error"
+            );
+            return;
+          }
+
+          const data = await response.json();
+          const models = data.data || [];
+
+          if (models.length === 0) {
+            ctx.ui.notify("No models found", "info");
+            return;
+          }
+
+          // Get existing model IDs
+          const existingIds = new Set(provider.models.map((m) => m.id));
+
+          // Filter out already imported models
+          const newModels = models
+            .filter((m: any) => !existingIds.has(m.id))
+            .map((m: any) => m.id)
+            .sort();
+
+          if (newModels.length === 0) {
+            ctx.ui.notify("All available models are already imported", "info");
+            return;
+          }
+
+          ctx.ui.notify(
+            `Found ${newModels.length} new model(s):\n\n${newModels.slice(0, 10).map((m: string) => `  • ${m}`).join("\n")}` +
+            (newModels.length > 10 ? `\n  ... and ${newModels.length - 10} more` : ""),
+            "info"
+          );
+
+          // Import all or select individually
+          const importAll = await ctx.ui.confirm(
+            `Import all ${newModels.length} model(s)?`,
+            "Import all"
+          );
+
+          let selectedModels: string[] = [];
+
+          if (importAll) {
+            selectedModels = newModels;
+          } else {
+            // Import one by one (up to 20 to avoid too many prompts)
+            const toAsk = newModels.slice(0, 20);
+            for (const modelId of toAsk) {
+              const shouldImport = await ctx.ui.confirm(
+                `Import "${modelId}"?`,
+                "Import model"
+              );
+              if (shouldImport) {
+                selectedModels.push(modelId);
+              }
+            }
+          }
+
+          if (selectedModels.length === 0) {
+            ctx.ui.notify("No models selected", "info");
+            return;
+          }
+
+          // Ask for batch configuration
+          const configureBatch = await ctx.ui.confirm(
+            "Apply default configuration to all imported models?",
+            "Batch configuration"
+          );
+
+          let batchConfig: Partial<ModelConfig> = {};
+
+          if (configureBatch) {
+            const reasoning = await ctx.ui.confirm(
+              "Do these models support reasoning?",
+              "Reasoning support"
+            );
+
+            if (reasoning) {
+              batchConfig.reasoning = true;
+            }
+
+            const contextInput = await ctx.ui.input(
+              "Context window (optional, e.g., 128000):",
+              ""
+            );
+            if (contextInput) {
+              const contextWindow = parseInt(contextInput, 10);
+              if (!isNaN(contextWindow)) {
+                batchConfig.contextWindow = contextWindow;
+              }
+            }
+
+            const maxInput = await ctx.ui.input(
+              "Max output tokens (optional, e.g., 4096):",
+              ""
+            );
+            if (maxInput) {
+              const maxTokens = parseInt(maxInput, 10);
+              if (!isNaN(maxTokens)) {
+                batchConfig.maxTokens = maxTokens;
+              }
+            }
+          }
+
+          // Import selected models
+          for (const modelId of selectedModels) {
+            provider.models.push({
+              id: modelId,
+              name: modelId,
+              ...batchConfig,
+            });
+          }
+
+          if (saveConfig(config)) {
+            ctx.ui.notify(
+              `✓ Successfully imported ${selectedModels.length} model(s) to provider "${providerName}"`,
+              "success"
+            );
+          } else {
+            ctx.ui.notify("Failed to save configuration", "error");
+          }
+
+        } catch (error: any) {
+          if (error.name === "AbortError") {
+            ctx.ui.notify("Request timeout", "error");
+          } else {
+            ctx.ui.notify(`Error: ${error.message}`, "error");
+          }
+        }
+
       } else {
         ctx.ui.notify(
           "Provider Management Commands:\n\n" +
@@ -391,7 +723,8 @@ export default function (pi: ExtensionAPI) {
           "/provider list - List all providers\n" +
           "/provider remove - Remove provider (interactive)\n" +
           "/provider test - Test provider connection (interactive)\n" +
-          "/provider doctor - Run diagnostics\n\n" +
+          "/provider doctor - Run diagnostics\n" +
+          "/provider import-models - Import models from provider (interactive)\n\n" +
           "APIs: openai-completions, anthropic-messages, google-generative-ai",
           "info"
         );

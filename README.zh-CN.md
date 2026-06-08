@@ -11,10 +11,11 @@
 📦 **模型管理** - 为每个 provider 添加、列出和删除模型  
 🌐 **多 API 支持** - OpenAI Completions、Anthropic Messages、Google Generative AI  
 🔒 **安全的 API 密钥** - 支持环境变量（推荐）并提供明文警告  
-🛡️ **自动备份** - 修改前自动备份配置  
+🛡️ **自动备份** - 带时间戳的备份和轮换（保留最近 10 个）  
 🏥 **健康检查** - 使用 `/provider doctor` 进行内置诊断  
-⚡ **真实测试** - 实际连接测试，而非仅 URL 验证  
-🎯 **高级配置** - 推理、兼容性、上下文窗口、成本设置
+⚡ **真实测试** - 测试 `/models` 和 `/chat/completions` 两个端点  
+🎯 **高级配置** - 推理、兼容性、上下文窗口设置  
+🚀 **模型发现** - 使用 `/provider import-models` 从 provider 自动导入模型
 
 ## 安装
 
@@ -58,16 +59,24 @@ Use /provider or /add-model to manage configurations
 从已配置的 provider 列表中选择，删除前需确认。配置会在删除前自动备份。
 
 #### `/provider test` - 测试 provider 连接
-执行真实连接测试：
-- 对于 OpenAI 兼容 API：测试 `/models` 端点
+执行全面连接测试：
+- 测试 `/models` 端点（列出可用模型）
+- 测试 `/chat/completions` 端点（实际对话能力）
 - 验证身份认证和响应
-- 显示详细错误信息
+- 显示详细的测试结果和错误信息
+
+#### `/provider import-models` - 自动导入模型
+从 provider 自动发现和导入模型：
+- 从 `/models` 端点获取可用模型
+- 显示新模型列表（已存在的会被跳过）
+- 批量导入多个模型
+- 批量配置高级选项（推理、兼容性等）
 
 #### `/provider doctor` - 运行诊断
 检查配置健康状况：
 - 验证 JSON 结构
 - 检查环境变量
-- 显示备份位置
+- 显示带时间戳的备份历史（保留最近 10 个）
 - 报告配置问题
 
 ### 模型命令
@@ -137,7 +146,33 @@ export OLLAMA_API_KEY=ollama
 # Select provider: ollama
 # Testing ollama...
 # URL: http://localhost:11434/v1
-# ✓ Connection successful
+# 
+# Testing /models endpoint...
+# ✓ Found 5 models
+# 
+# Testing /chat/completions endpoint...
+# ✓ Chat completion successful
+# 
+# ✓ All tests passed
+```
+
+### 自动导入模型
+
+```bash
+/provider import-models
+# Select provider: ollama
+# Fetching models from ollama...
+# 
+# Found 3 new models:
+# • llama3.1:8b
+# • qwen2.5-coder:7b
+# • deepseek-r1:7b
+# 
+# Import all models? Yes
+# Configure advanced options? Yes
+# Does this model support reasoning? Yes (applies to all)
+# 
+# ✓ Successfully imported 3 models
 ```
 
 ### 运行诊断
@@ -147,13 +182,17 @@ export OLLAMA_API_KEY=ollama
 # Running diagnostics...
 # ✓ models.json is valid JSON
 # ✓ Location: /home/user/.pi/agent/models.json
-# ✓ Backup exists: /home/user/.pi/agent/models.json.backup
+# 
+# Backup History (10 most recent):
+# • models.json.backup.20260608_143022
+# • models.json.backup.20260608_120515
+# • models.json.backup.20260607_183044
 # 
 # Providers: 1
 # 
 # • ollama
 #   ✓ API key (OLLAMA_API_KEY) is set
-#   Models: 2
+#   Models: 5
 ```
 
 ### 使用配置的模型

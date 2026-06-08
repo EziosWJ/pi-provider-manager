@@ -11,10 +11,11 @@ Gestor interactivo de proveedores y modelos para [pi coding agent](https://githu
 📦 **Gestión de Modelos** - Añadir, listar y eliminar modelos para cada proveedor  
 🌐 **Soporte Multi-API** - OpenAI Completions, Anthropic Messages, Google Generative AI  
 🔒 **Claves API Seguras** - Soporte de variables de entorno (recomendado) con advertencias de texto plano  
-🛡️ **Respaldo Automático** - Respaldo automático de la configuración antes de cambios  
+🛡️ **Respaldo Automático** - Respaldos con marca de tiempo y rotación (mantiene los 10 más recientes)  
 🏥 **Verificación de Salud** - Diagnóstico integrado con `/provider doctor`  
-⚡ **Pruebas Reales** - Pruebas de conexión reales, no solo validación de URL  
-🎯 **Configuración Avanzada** - Razonamiento, compatibilidad, ventana de contexto, configuración de costos
+⚡ **Pruebas Reales** - Prueba tanto los endpoints `/models` como `/chat/completions`  
+🎯 **Configuración Avanzada** - Razonamiento, compatibilidad, configuración de ventana de contexto  
+🚀 **Descubrimiento de Modelos** - Auto-importar modelos desde proveedores con `/provider import-models`
 
 ## Instalación
 
@@ -58,16 +59,24 @@ Muestra nombre, URL, tipo de API, estado de la clave API (env o enmascarada) y c
 Selecciona de la lista de proveedores configurados, confirma antes de eliminar. La configuración se respalda automáticamente antes de la eliminación.
 
 #### `/provider test` - Probar conexión del proveedor
-Realiza una prueba de conectividad real:
-- Para APIs compatibles con OpenAI: Prueba el endpoint `/models`
+Realiza pruebas de conectividad completas:
+- Prueba el endpoint `/models` (lista modelos disponibles)
+- Prueba el endpoint `/chat/completions` (funcionalidad de conversación real)
 - Valida autenticación y respuesta
-- Muestra mensajes de error detallados
+- Muestra resultados de prueba detallados y mensajes de error
+
+#### `/provider import-models` - Auto-importar modelos
+Descubre e importa modelos automáticamente desde el proveedor:
+- Obtiene modelos disponibles desde el endpoint `/models`
+- Muestra lista de modelos nuevos (omite los existentes)
+- Importa múltiples modelos por lote
+- Configura opciones avanzadas por lote (razonamiento, compatibilidad, etc.)
 
 #### `/provider doctor` - Ejecutar diagnósticos
 Verificación de salud de tu configuración:
 - Valida estructura JSON
 - Verifica variables de entorno
-- Muestra ubicación del respaldo
+- Muestra historial de respaldos con marca de tiempo (mantiene los 10 más recientes)
 - Reporta problemas de configuración
 
 ### Comandos de Modelo
@@ -137,7 +146,33 @@ export OLLAMA_API_KEY=ollama
 # Select provider: ollama
 # Testing ollama...
 # URL: http://localhost:11434/v1
-# ✓ Connection successful
+# 
+# Testing /models endpoint...
+# ✓ Found 5 models
+# 
+# Testing /chat/completions endpoint...
+# ✓ Chat completion successful
+# 
+# ✓ All tests passed
+```
+
+### Auto-Importar Modelos
+
+```bash
+/provider import-models
+# Select provider: ollama
+# Fetching models from ollama...
+# 
+# Found 3 new models:
+# • llama3.1:8b
+# • qwen2.5-coder:7b
+# • deepseek-r1:7b
+# 
+# Import all models? Yes
+# Configure advanced options? Yes
+# Does this model support reasoning? Yes (applies to all)
+# 
+# ✓ Successfully imported 3 models
 ```
 
 ### Ejecutar Diagnósticos
@@ -147,13 +182,17 @@ export OLLAMA_API_KEY=ollama
 # Running diagnostics...
 # ✓ models.json is valid JSON
 # ✓ Location: /home/user/.pi/agent/models.json
-# ✓ Backup exists: /home/user/.pi/agent/models.json.backup
+# 
+# Backup History (10 most recent):
+# • models.json.backup.20260608_143022
+# • models.json.backup.20260608_120515
+# • models.json.backup.20260607_183044
 # 
 # Providers: 1
 # 
 # • ollama
 #   ✓ API key (OLLAMA_API_KEY) is set
-#   Models: 2
+#   Models: 5
 ```
 
 ### Usar los Modelos

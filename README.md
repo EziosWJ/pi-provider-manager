@@ -11,10 +11,11 @@ Interactive provider and model manager for [pi coding agent](https://github.com/
 📦 **Model Management** - Add, list, and remove models for each provider  
 🌐 **Multi-API Support** - OpenAI Completions, Anthropic Messages, Google Generative AI  
 🔒 **Secure API Keys** - Environment variable support (recommended) with plaintext warnings  
-🛡️ **Auto Backup** - Automatic configuration backup before changes  
+🛡️ **Auto Backup** - Timestamped backups with rotation (keeps 10 most recent)  
 🏥 **Health Check** - Built-in diagnostics with `/provider doctor`  
-⚡ **Real Testing** - Actual connection tests, not just URL validation  
-🎯 **Advanced Config** - Reasoning, compat, context window, cost settings
+⚡ **Real Testing** - Tests both `/models` and `/chat/completions` endpoints  
+🎯 **Advanced Config** - Reasoning, compat, context window settings  
+🚀 **Model Discovery** - Auto-import models from providers with `/provider import-models`
 
 ## Installation
 
@@ -58,17 +59,25 @@ Shows name, URL, API type, API key status (env or masked), and model count for e
 Select from list of configured providers, confirms before deletion. Configuration is automatically backed up before removal.
 
 #### `/provider test` - Test provider connection
-Performs real connectivity test:
-- For OpenAI-compatible APIs: Tests `/models` endpoint
+Performs comprehensive connectivity tests:
+- For OpenAI-compatible APIs: Tests both `/models` and `/chat/completions` endpoints
 - Validates authentication and response
-- Shows detailed error messages
+- Distinguishes between network errors, auth failures, and endpoint issues
+- Shows detailed test results with status indicators
 
 #### `/provider doctor` - Run diagnostics
 Health check for your configuration:
 - Validates JSON structure
 - Checks environment variables
-- Shows backup location
+- Shows timestamped backup history (keeps 10 most recent)
 - Reports configuration issues
+
+#### `/provider import-models` - Auto-discover and import models
+Automatically fetch and import models from OpenAI-compatible providers:
+- Fetches available models from `/models` endpoint
+- Shows new models not yet imported
+- Supports batch import or selective import
+- Batch configuration for reasoning, context window, max tokens
 
 ### Model Commands
 
@@ -137,7 +146,31 @@ export OLLAMA_API_KEY=ollama
 # Select provider: ollama
 # Testing ollama...
 # URL: http://localhost:11434/v1
-# ✓ Connection successful
+# ✓ All tests passed
+# 
+# ✓ /models endpoint: OK
+# ✓ /chat/completions: Endpoint available (test model not found)
+```
+
+### Auto-Import Models
+
+```bash
+/provider import-models
+# Select provider to import models from: ollama
+# Fetching models from ollama...
+# Found 15 new model(s):
+# 
+#   • llama3.1:8b
+#   • qwen2.5-coder:7b
+#   • deepseek-coder:6.7b
+#   ... and 12 more
+# 
+# Import all 15 model(s)? Yes
+# Apply default configuration to all imported models? Yes
+# Do these models support reasoning? No
+# Context window (optional, e.g., 128000): 32768
+# Max output tokens (optional, e.g., 4096): 4096
+# ✓ Successfully imported 15 model(s) to provider "ollama"
 ```
 
 ### Run Diagnostics
@@ -147,13 +180,15 @@ export OLLAMA_API_KEY=ollama
 # Running diagnostics...
 # ✓ models.json is valid JSON
 # ✓ Location: /home/user/.pi/agent/models.json
-# ✓ Backup exists: /home/user/.pi/agent/models.json.backup
+# ✓ Backups: 5 (keeping 10 most recent)
+#   Latest: models.json.backup.2026-06-09-07-45-23
+#   Location: /home/user/.pi/agent/backups
 # 
 # Providers: 1
 # 
 # • ollama
 #   ✓ API key (OLLAMA_API_KEY) is set
-#   Models: 2
+#   Models: 17
 ```
 
 ### Use the Models

@@ -11,10 +11,11 @@
 📦 **모델 관리** - 각 프로바이더의 모델 추가, 나열, 제거  
 🌐 **다중 API 지원** - OpenAI Completions, Anthropic Messages, Google Generative AI  
 🔒 **안전한 API 키** - 환경 변수 지원(권장) 및 평문 경고  
-🛡️ **자동 백업** - 변경 전 설정 자동 백업  
+🛡️ **자동 백업** - 타임스탬프가 있는 백업 및 순환(최근 10개 유지)  
 🏥 **상태 확인** - `/provider doctor`를 통한 내장 진단  
-⚡ **실제 테스트** - URL 검증뿐만 아니라 실제 연결 테스트  
-🎯 **고급 설정** - 추론, 호환성, 컨텍스트 윈도우, 비용 설정
+⚡ **실제 테스트** - `/models`와 `/chat/completions` 두 엔드포인트 모두 테스트  
+🎯 **고급 설정** - 추론, 호환성, 컨텍스트 윈도우 설정  
+🚀 **모델 검색** - `/provider import-models`로 프로바이더에서 모델 자동 가져오기
 
 ## 설치
 
@@ -58,16 +59,24 @@ Use /provider or /add-model to manage configurations
 구성된 프로바이더 목록에서 선택하고 삭제 전 확인합니다. 설정은 제거 전에 자동으로 백업됩니다.
 
 #### `/provider test` - 프로바이더 연결 테스트
-실제 연결 테스트를 수행:
-- OpenAI 호환 API의 경우: `/models` 엔드포인트 테스트
+포괄적인 연결 테스트 수행:
+- `/models` 엔드포인트 테스트(사용 가능한 모델 나열)
+- `/chat/completions` 엔드포인트 테스트(실제 대화 기능)
 - 인증 및 응답 검증
-- 상세한 오류 메시지 표시
+- 상세한 테스트 결과 및 오류 메시지 표시
+
+#### `/provider import-models` - 모델 자동 가져오기
+프로바이더에서 모델 자동 검색 및 가져오기:
+- `/models` 엔드포인트에서 사용 가능한 모델 가져오기
+- 새 모델 목록 표시(기존 모델은 건너뜀)
+- 여러 모델 일괄 가져오기
+- 고급 옵션 일괄 구성(추론, 호환성 등)
 
 #### `/provider doctor` - 진단 실행
 설정 상태 확인:
 - JSON 구조 검증
 - 환경 변수 확인
-- 백업 위치 표시
+- 타임스탬프가 있는 백업 기록 표시(최근 10개 유지)
 - 설정 문제 보고
 
 ### 모델 명령
@@ -137,7 +146,33 @@ export OLLAMA_API_KEY=ollama
 # Select provider: ollama
 # Testing ollama...
 # URL: http://localhost:11434/v1
-# ✓ Connection successful
+# 
+# Testing /models endpoint...
+# ✓ Found 5 models
+# 
+# Testing /chat/completions endpoint...
+# ✓ Chat completion successful
+# 
+# ✓ All tests passed
+```
+
+### 모델 자동 가져오기
+
+```bash
+/provider import-models
+# Select provider: ollama
+# Fetching models from ollama...
+# 
+# Found 3 new models:
+# • llama3.1:8b
+# • qwen2.5-coder:7b
+# • deepseek-r1:7b
+# 
+# Import all models? Yes
+# Configure advanced options? Yes
+# Does this model support reasoning? Yes (applies to all)
+# 
+# ✓ Successfully imported 3 models
 ```
 
 ### 진단 실행
@@ -147,13 +182,17 @@ export OLLAMA_API_KEY=ollama
 # Running diagnostics...
 # ✓ models.json is valid JSON
 # ✓ Location: /home/user/.pi/agent/models.json
-# ✓ Backup exists: /home/user/.pi/agent/models.json.backup
+# 
+# Backup History (10 most recent):
+# • models.json.backup.20260608_143022
+# • models.json.backup.20260608_120515
+# • models.json.backup.20260607_183044
 # 
 # Providers: 1
 # 
 # • ollama
 #   ✓ API key (OLLAMA_API_KEY) is set
-#   Models: 2
+#   Models: 5
 ```
 
 ### 모델 사용

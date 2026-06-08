@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-06-09
+
+### Added
+- **Model auto-discovery**: `/provider import-models` command to automatically fetch and import models from OpenAI-compatible providers
+  - Fetches available models from `/models` endpoint
+  - Shows new models not yet imported
+  - Supports batch import or selective import (up to 20 models)
+  - Batch configuration for reasoning, context window, max tokens
+- **Enhanced provider testing**: `/provider test` now performs comprehensive tests
+  - Tests both `/models` and `/chat/completions` endpoints
+  - Distinguishes between network errors, auth failures, and endpoint issues
+  - Shows detailed test results with status indicators
+- **Timestamped backups**: Backup files now include timestamps (e.g., `models.json.backup.2026-06-09-07-45-23`)
+  - Keeps 10 most recent backups automatically
+  - Stored in `~/.pi/agent/backups/` directory
+  - `/provider doctor` shows backup history
+
+### Changed
+- Backup system: Changed from single `models.json.backup` to timestamped backups with rotation
+- `/provider doctor` now displays timestamped backup history and location
+
+### Removed
+- Removed unimplemented fields from ModelConfig interface:
+  - `cost` structure (input, output, cacheRead, cacheWrite)
+  - `thinkingLevelMap`
+
+### Fixed
+- Configuration backup path references updated throughout
+
 ## [1.1.0] - 2026-06-09
 
 ### Added
