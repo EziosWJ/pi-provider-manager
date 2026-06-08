@@ -9,7 +9,12 @@
 ✨ **インタラクティブUI** - すべての操作でpiの組み込み選択/入力/確認ダイアログを使用  
 🔧 **プロバイダー管理** - カスタムプロバイダーの追加、リスト表示、削除、テスト  
 📦 **モデル管理** - 各プロバイダーのモデルの追加、リスト表示、削除  
-🌐 **マルチAPI対応** - OpenAI Completions、Anthropic Messages、Google Generative AI
+🌐 **マルチAPI対応** - OpenAI Completions、Anthropic Messages、Google Generative AI  
+🔒 **安全なAPIキー** - 環境変数サポート（推奨）とプレーンテキスト警告  
+🛡️ **自動バックアップ** - 変更前に設定を自動バックアップ  
+🏥 **ヘルスチェック** - `/provider doctor`による組み込み診断  
+⚡ **実際のテスト** - URL検証だけでなく実際の接続テスト  
+🎯 **高度な設定** - 推論、互換性、コンテキストウィンドウ、コスト設定
 
 ## インストール
 
@@ -42,16 +47,28 @@ Use /provider or /add-model to manage configurations
 - プロバイダー名
 - ベースURL（例：`http://localhost:11434/v1`）
 - APIタイプ（リストから選択）
-- APIキー
+- **APIキーの方法**（環境変数推奨、または直接入力）
+
+**セキュリティ注意**：環境変数を使用すると、APIキーが設定ファイルの外に保存されます。
 
 #### `/provider list` - すべてのプロバイダーをリスト表示
-各プロバイダーの名前、URL、APIタイプ、モデル数を表示します。
+各プロバイダーの名前、URL、APIタイプ、APIキーのステータス（環境変数またはマスク）、モデル数を表示します。
 
 #### `/provider remove` - プロバイダーを削除
-設定済みプロバイダーのリストから選択し、削除前に確認します。
+設定済みプロバイダーのリストから選択し、削除前に確認します。設定は削除前に自動的にバックアップされます。
 
-#### `/provider test <name>` - プロバイダーのURLをテスト
-プロバイダーのベースURLを検証します。
+#### `/provider test` - プロバイダー接続をテスト
+実際の接続テストを実行：
+- OpenAI互換APIの場合：`/models`エンドポイントをテスト
+- 認証とレスポンスを検証
+- 詳細なエラーメッセージを表示
+
+#### `/provider doctor` - 診断を実行
+設定のヘルスチェック：
+- JSON構造を検証
+- 環境変数を確認
+- バックアップの場所を表示
+- 設定の問題を報告
 
 ### モデルコマンド
 
@@ -60,20 +77,27 @@ Use /provider or /add-model to manage configurations
 - プロバイダーを選択（設定済みリストから）
 - モデルID（例：`gpt-4`、`llama3.1:8b`）
 - モデル名（オプションの表示名）
+- **高度なオプション**（オプション）：
+  - 推論サポート
+  - 互換性設定（developer role、reasoning_effort）
+  - コンテキストウィンドウサイズ
+  - 最大出力トークン数
 
 #### `/add-model list [provider]` - モデルをリスト表示
 - 引数なし：すべてのプロバイダーのすべてのモデルをリスト表示
 - プロバイダー名あり：そのプロバイダーのモデルのみをリスト表示
+- インジケーターを表示：`[reasoning]`、`[compat]`
 
 #### `/add-model remove` - モデルを削除
 対話的なプロンプト：
 - プロバイダーを選択
 - モデルを選択（そのプロバイダーから）
 - 削除を確認
+- 設定は削除前に自動的にバックアップされます
 
 ## 使用例
 
-### Ollamaプロバイダーを追加
+### 環境変数を使用してOllamaプロバイダーを追加
 
 ```bash
 pi
@@ -81,7 +105,11 @@ pi
 # Name: ollama
 # Base URL: http://localhost:11434/v1
 # API type: OpenAI Completions
-# API Key: ollama
+# API Key method: Environment Variable (Recommended)
+# Environment variable name: OLLAMA_API_KEY
+
+# 次に環境変数を設定：
+export OLLAMA_API_KEY=ollama
 ```
 
 ### Ollamaにモデルを追加
@@ -91,11 +119,41 @@ pi
 # Select provider: ollama
 # Model ID: llama3.1:8b
 # Model Name: Llama 3.1 8B
+# Configure advanced options? No
 
 /add-model add
 # Select provider: ollama
 # Model ID: qwen2.5-coder:7b
 # Model Name: Qwen 2.5 Coder 7B
+# Configure advanced options? Yes
+# Does this model support reasoning? Yes
+# ...
+```
+
+### プロバイダー接続をテスト
+
+```bash
+/provider test
+# Select provider: ollama
+# Testing ollama...
+# URL: http://localhost:11434/v1
+# ✓ Connection successful
+```
+
+### 診断を実行
+
+```bash
+/provider doctor
+# Running diagnostics...
+# ✓ models.json is valid JSON
+# ✓ Location: /home/user/.pi/agent/models.json
+# ✓ Backup exists: /home/user/.pi/agent/models.json.backup
+# 
+# Providers: 1
+# 
+# • ollama
+#   ✓ API key (OLLAMA_API_KEY) is set
+#   Models: 2
 ```
 
 ### モデルを使用

@@ -9,7 +9,12 @@ Interactive provider and model manager for [pi coding agent](https://github.com/
 ✨ **Interactive UI** - All operations use pi's built-in select/input/confirm dialogs  
 🔧 **Provider Management** - Add, list, remove, and test custom providers  
 📦 **Model Management** - Add, list, and remove models for each provider  
-🌐 **Multi-API Support** - OpenAI Completions, Anthropic Messages, Google Generative AI
+🌐 **Multi-API Support** - OpenAI Completions, Anthropic Messages, Google Generative AI  
+🔒 **Secure API Keys** - Environment variable support (recommended) with plaintext warnings  
+🛡️ **Auto Backup** - Automatic configuration backup before changes  
+🏥 **Health Check** - Built-in diagnostics with `/provider doctor`  
+⚡ **Real Testing** - Actual connection tests, not just URL validation  
+🎯 **Advanced Config** - Reasoning, compat, context window, cost settings
 
 ## Installation
 
@@ -42,16 +47,28 @@ Interactive prompts:
 - Provider name
 - Base URL (e.g., `http://localhost:11434/v1`)
 - API type (select from list)
-- API Key
+- **API Key method** (Environment Variable recommended, or Direct Input)
+
+**Security Note**: Using environment variables keeps your API keys out of the configuration file.
 
 #### `/provider list` - List all providers
-Shows name, URL, API type, and model count for each provider.
+Shows name, URL, API type, API key status (env or masked), and model count for each provider.
 
 #### `/provider remove` - Remove a provider
-Select from list of configured providers, confirms before deletion.
+Select from list of configured providers, confirms before deletion. Configuration is automatically backed up before removal.
 
-#### `/provider test <name>` - Test provider URL
-Validates the provider's base URL.
+#### `/provider test` - Test provider connection
+Performs real connectivity test:
+- For OpenAI-compatible APIs: Tests `/models` endpoint
+- Validates authentication and response
+- Shows detailed error messages
+
+#### `/provider doctor` - Run diagnostics
+Health check for your configuration:
+- Validates JSON structure
+- Checks environment variables
+- Shows backup location
+- Reports configuration issues
 
 ### Model Commands
 
@@ -60,20 +77,27 @@ Interactive prompts:
 - Select provider (from configured list)
 - Model ID (e.g., `gpt-4`, `llama3.1:8b`)
 - Model name (optional display name)
+- **Advanced options** (optional):
+  - Reasoning support
+  - Compatibility settings (developer role, reasoning_effort)
+  - Context window size
+  - Max output tokens
 
 #### `/add-model list [provider]` - List models
 - Without argument: lists all models from all providers
 - With provider name: lists models for that provider only
+- Shows indicators: `[reasoning]`, `[compat]`
 
 #### `/add-model remove` - Remove a model
 Interactive prompts:
 - Select provider
 - Select model (from that provider)
 - Confirm deletion
+- Configuration is automatically backed up before removal
 
 ## Examples
 
-### Add Ollama Provider
+### Add Ollama Provider with Environment Variable
 
 ```bash
 pi
@@ -81,7 +105,11 @@ pi
 # Name: ollama
 # Base URL: http://localhost:11434/v1
 # API type: OpenAI Completions
-# API Key: ollama
+# API Key method: Environment Variable (Recommended)
+# Environment variable name: OLLAMA_API_KEY
+
+# Then set the environment variable:
+export OLLAMA_API_KEY=ollama
 ```
 
 ### Add Models to Ollama
@@ -91,11 +119,41 @@ pi
 # Select provider: ollama
 # Model ID: llama3.1:8b
 # Model Name: Llama 3.1 8B
+# Configure advanced options? No
 
 /add-model add
 # Select provider: ollama
 # Model ID: qwen2.5-coder:7b
 # Model Name: Qwen 2.5 Coder 7B
+# Configure advanced options? Yes
+# Does this model support reasoning? Yes
+# ...
+```
+
+### Test Provider Connection
+
+```bash
+/provider test
+# Select provider: ollama
+# Testing ollama...
+# URL: http://localhost:11434/v1
+# ✓ Connection successful
+```
+
+### Run Diagnostics
+
+```bash
+/provider doctor
+# Running diagnostics...
+# ✓ models.json is valid JSON
+# ✓ Location: /home/user/.pi/agent/models.json
+# ✓ Backup exists: /home/user/.pi/agent/models.json.backup
+# 
+# Providers: 1
+# 
+# • ollama
+#   ✓ API key (OLLAMA_API_KEY) is set
+#   Models: 2
 ```
 
 ### Use the Models

@@ -9,7 +9,12 @@
 ✨ **대화형 UI** - 모든 작업에서 pi의 내장 선택/입력/확인 대화상자 사용  
 🔧 **프로바이더 관리** - 사용자 정의 프로바이더 추가, 나열, 제거, 테스트  
 📦 **모델 관리** - 각 프로바이더의 모델 추가, 나열, 제거  
-🌐 **다중 API 지원** - OpenAI Completions, Anthropic Messages, Google Generative AI
+🌐 **다중 API 지원** - OpenAI Completions, Anthropic Messages, Google Generative AI  
+🔒 **안전한 API 키** - 환경 변수 지원(권장) 및 평문 경고  
+🛡️ **자동 백업** - 변경 전 설정 자동 백업  
+🏥 **상태 확인** - `/provider doctor`를 통한 내장 진단  
+⚡ **실제 테스트** - URL 검증뿐만 아니라 실제 연결 테스트  
+🎯 **고급 설정** - 추론, 호환성, 컨텍스트 윈도우, 비용 설정
 
 ## 설치
 
@@ -42,16 +47,28 @@ Use /provider or /add-model to manage configurations
 - 프로바이더 이름
 - 베이스 URL (예: `http://localhost:11434/v1`)
 - API 유형 (목록에서 선택)
-- API 키
+- **API 키 방법** (환경 변수 권장, 또는 직접 입력)
+
+**보안 참고**: 환경 변수를 사용하면 API 키가 설정 파일 밖에 보관됩니다.
 
 #### `/provider list` - 모든 프로바이더 나열
-각 프로바이더의 이름, URL, API 유형, 모델 수를 표시합니다.
+각 프로바이더의 이름, URL, API 유형, API 키 상태(환경 변수 또는 마스킹), 모델 수를 표시합니다.
 
 #### `/provider remove` - 프로바이더 제거
-구성된 프로바이더 목록에서 선택하고 삭제 전 확인합니다.
+구성된 프로바이더 목록에서 선택하고 삭제 전 확인합니다. 설정은 제거 전에 자동으로 백업됩니다.
 
-#### `/provider test <name>` - 프로바이더 URL 테스트
-프로바이더의 베이스 URL을 검증합니다.
+#### `/provider test` - 프로바이더 연결 테스트
+실제 연결 테스트를 수행:
+- OpenAI 호환 API의 경우: `/models` 엔드포인트 테스트
+- 인증 및 응답 검증
+- 상세한 오류 메시지 표시
+
+#### `/provider doctor` - 진단 실행
+설정 상태 확인:
+- JSON 구조 검증
+- 환경 변수 확인
+- 백업 위치 표시
+- 설정 문제 보고
 
 ### 모델 명령
 
@@ -60,20 +77,27 @@ Use /provider or /add-model to manage configurations
 - 프로바이더 선택 (구성된 목록에서)
 - 모델 ID (예: `gpt-4`, `llama3.1:8b`)
 - 모델 이름 (선택적 표시 이름)
+- **고급 옵션** (선택사항):
+  - 추론 지원
+  - 호환성 설정 (developer role, reasoning_effort)
+  - 컨텍스트 윈도우 크기
+  - 최대 출력 토큰 수
 
 #### `/add-model list [provider]` - 모델 나열
 - 인수 없음: 모든 프로바이더의 모든 모델 나열
 - 프로바이더 이름 포함: 해당 프로바이더의 모델만 나열
+- 표시기 표시: `[reasoning]`, `[compat]`
 
 #### `/add-model remove` - 모델 제거
 대화형 프롬프트:
 - 프로바이더 선택
 - 모델 선택 (해당 프로바이더에서)
 - 삭제 확인
+- 설정은 제거 전에 자동으로 백업됩니다
 
 ## 사용 예시
 
-### Ollama 프로바이더 추가
+### 환경 변수로 Ollama 프로바이더 추가
 
 ```bash
 pi
@@ -81,7 +105,11 @@ pi
 # Name: ollama
 # Base URL: http://localhost:11434/v1
 # API type: OpenAI Completions
-# API Key: ollama
+# API Key method: Environment Variable (Recommended)
+# Environment variable name: OLLAMA_API_KEY
+
+# 그런 다음 환경 변수 설정:
+export OLLAMA_API_KEY=ollama
 ```
 
 ### Ollama에 모델 추가
@@ -91,11 +119,41 @@ pi
 # Select provider: ollama
 # Model ID: llama3.1:8b
 # Model Name: Llama 3.1 8B
+# Configure advanced options? No
 
 /add-model add
 # Select provider: ollama
 # Model ID: qwen2.5-coder:7b
 # Model Name: Qwen 2.5 Coder 7B
+# Configure advanced options? Yes
+# Does this model support reasoning? Yes
+# ...
+```
+
+### 프로바이더 연결 테스트
+
+```bash
+/provider test
+# Select provider: ollama
+# Testing ollama...
+# URL: http://localhost:11434/v1
+# ✓ Connection successful
+```
+
+### 진단 실행
+
+```bash
+/provider doctor
+# Running diagnostics...
+# ✓ models.json is valid JSON
+# ✓ Location: /home/user/.pi/agent/models.json
+# ✓ Backup exists: /home/user/.pi/agent/models.json.backup
+# 
+# Providers: 1
+# 
+# • ollama
+#   ✓ API key (OLLAMA_API_KEY) is set
+#   Models: 2
 ```
 
 ### 모델 사용

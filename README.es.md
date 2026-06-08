@@ -9,7 +9,12 @@ Gestor interactivo de proveedores y modelos para [pi coding agent](https://githu
 ✨ **Interfaz Interactiva** - Todas las operaciones usan los diálogos integrados de selección/entrada/confirmación de pi  
 🔧 **Gestión de Proveedores** - Añadir, listar, eliminar y probar proveedores personalizados  
 📦 **Gestión de Modelos** - Añadir, listar y eliminar modelos para cada proveedor  
-🌐 **Soporte Multi-API** - OpenAI Completions, Anthropic Messages, Google Generative AI
+🌐 **Soporte Multi-API** - OpenAI Completions, Anthropic Messages, Google Generative AI  
+🔒 **Claves API Seguras** - Soporte de variables de entorno (recomendado) con advertencias de texto plano  
+🛡️ **Respaldo Automático** - Respaldo automático de la configuración antes de cambios  
+🏥 **Verificación de Salud** - Diagnóstico integrado con `/provider doctor`  
+⚡ **Pruebas Reales** - Pruebas de conexión reales, no solo validación de URL  
+🎯 **Configuración Avanzada** - Razonamiento, compatibilidad, ventana de contexto, configuración de costos
 
 ## Instalación
 
@@ -42,16 +47,28 @@ Indicaciones interactivas:
 - Nombre del proveedor
 - URL base (ej: `http://localhost:11434/v1`)
 - Tipo de API (selecciona de la lista)
-- Clave API
+- **Método de Clave API** (Variable de entorno recomendada, o Entrada directa)
+
+**Nota de Seguridad**: Usar variables de entorno mantiene tus claves API fuera del archivo de configuración.
 
 #### `/provider list` - Listar todos los proveedores
-Muestra nombre, URL, tipo de API y cantidad de modelos para cada proveedor.
+Muestra nombre, URL, tipo de API, estado de la clave API (env o enmascarada) y cantidad de modelos para cada proveedor.
 
 #### `/provider remove` - Eliminar proveedor
-Selecciona de la lista de proveedores configurados, confirma antes de eliminar.
+Selecciona de la lista de proveedores configurados, confirma antes de eliminar. La configuración se respalda automáticamente antes de la eliminación.
 
-#### `/provider test <name>` - Probar URL del proveedor
-Valida la URL base del proveedor.
+#### `/provider test` - Probar conexión del proveedor
+Realiza una prueba de conectividad real:
+- Para APIs compatibles con OpenAI: Prueba el endpoint `/models`
+- Valida autenticación y respuesta
+- Muestra mensajes de error detallados
+
+#### `/provider doctor` - Ejecutar diagnósticos
+Verificación de salud de tu configuración:
+- Valida estructura JSON
+- Verifica variables de entorno
+- Muestra ubicación del respaldo
+- Reporta problemas de configuración
 
 ### Comandos de Modelo
 
@@ -60,20 +77,27 @@ Indicaciones interactivas:
 - Seleccionar proveedor (de la lista configurada)
 - ID del modelo (ej: `gpt-4`, `llama3.1:8b`)
 - Nombre del modelo (nombre de visualización opcional)
+- **Opciones avanzadas** (opcional):
+  - Soporte de razonamiento
+  - Configuración de compatibilidad (developer role, reasoning_effort)
+  - Tamaño de ventana de contexto
+  - Tokens máximos de salida
 
 #### `/add-model list [provider]` - Listar modelos
 - Sin argumento: lista todos los modelos de todos los proveedores
 - Con nombre de proveedor: lista solo los modelos de ese proveedor
+- Muestra indicadores: `[reasoning]`, `[compat]`
 
 #### `/add-model remove` - Eliminar modelo
 Indicaciones interactivas:
 - Seleccionar proveedor
 - Seleccionar modelo (de ese proveedor)
 - Confirmar eliminación
+- La configuración se respalda automáticamente antes de la eliminación
 
 ## Ejemplos
 
-### Añadir Proveedor Ollama
+### Añadir Proveedor Ollama con Variable de Entorno
 
 ```bash
 pi
@@ -81,7 +105,11 @@ pi
 # Name: ollama
 # Base URL: http://localhost:11434/v1
 # API type: OpenAI Completions
-# API Key: ollama
+# API Key method: Environment Variable (Recommended)
+# Environment variable name: OLLAMA_API_KEY
+
+# Luego configura la variable de entorno:
+export OLLAMA_API_KEY=ollama
 ```
 
 ### Añadir Modelos a Ollama
@@ -91,11 +119,41 @@ pi
 # Select provider: ollama
 # Model ID: llama3.1:8b
 # Model Name: Llama 3.1 8B
+# Configure advanced options? No
 
 /add-model add
 # Select provider: ollama
 # Model ID: qwen2.5-coder:7b
 # Model Name: Qwen 2.5 Coder 7B
+# Configure advanced options? Yes
+# Does this model support reasoning? Yes
+# ...
+```
+
+### Probar Conexión del Proveedor
+
+```bash
+/provider test
+# Select provider: ollama
+# Testing ollama...
+# URL: http://localhost:11434/v1
+# ✓ Connection successful
+```
+
+### Ejecutar Diagnósticos
+
+```bash
+/provider doctor
+# Running diagnostics...
+# ✓ models.json is valid JSON
+# ✓ Location: /home/user/.pi/agent/models.json
+# ✓ Backup exists: /home/user/.pi/agent/models.json.backup
+# 
+# Providers: 1
+# 
+# • ollama
+#   ✓ API key (OLLAMA_API_KEY) is set
+#   Models: 2
 ```
 
 ### Usar los Modelos
