@@ -701,6 +701,7 @@ async function handleProviderImportModels(ctx: any): Promise<void> {
     const configMode = await ctx.ui.select(
       `Configure ${selectedModels.length} selected model(s):`,
       [
+        "Use OpenRouter defaults (auto-fetch for each)",
         "Use defaults (no config)",
         "Batch config (same for all)",
         "Individual config (one by one)",
@@ -714,7 +715,36 @@ async function handleProviderImportModels(ctx: any): Promise<void> {
 
     const modelConfigs: ModelConfig[] = [];
 
-    if (configMode === "Use defaults (no config)") {
+    if (configMode === "Use OpenRouter defaults (auto-fetch for each)") {
+      // Fetch info from OpenRouter for each model
+      ctx.ui.notify(`Fetching model info from OpenRouter for ${selectedModels.length} model(s)...`, "info");
+
+      for (const modelId of selectedModels) {
+        const modelInfo = await fetchModelInfoFromOpenRouter(modelId);
+
+        const modelConfig: ModelConfig = {
+          id: modelId,
+          name: modelId,
+        };
+
+        if (modelInfo) {
+          if (modelInfo.contextWindow) {
+            modelConfig.contextWindow = modelInfo.contextWindow;
+          }
+          if (modelInfo.maxTokens) {
+            modelConfig.maxTokens = modelInfo.maxTokens;
+          }
+          ctx.ui.notify(
+            `✓ ${modelId}: ${modelInfo.contextWindow || "N/A"}k context, ${modelInfo.maxTokens || "N/A"} max tokens`,
+            "success"
+          );
+        } else {
+          ctx.ui.notify(`⚠ ${modelId}: info not found, using defaults`, "warning");
+        }
+
+        modelConfigs.push(modelConfig);
+      }
+    } else if (configMode === "Use defaults (no config)") {
       // Import with defaults
       for (const modelId of selectedModels) {
         modelConfigs.push({
@@ -1189,6 +1219,123 @@ async function handleModelRemove(ctx: any): Promise<void> {
   }
 }
 
+async function handleModelClone(ctx: any): Promise<void> {
+  const config = loadConfig();
+  if (config === null) {
+    ctx.ui.notify("Failed to load models.json", "error");
+    return;
+  }
+
+  const providers = Object.keys(config.providers);
+
+  if (providers.length === 0) {
+    ctx.ui.notify("No providers configured", "info");
+    return;
+  }
+
+  // Select source provider
+  const sourceProviderName = await ctx.ui.select("Select source provider:", providers);
+
+  if (!sourceProviderName) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const sourceProvider = config.providers[sourceProviderName];
+
+  if (sourceProvider.models.length === 0) {
+    ctx.ui.notify(`No models in provider "${sourceProviderName}"`, "info");
+    return;
+  }
+
+  // Select source model
+  const sourceModelId = await ctx.ui.select(
+    "Select model to clone:",
+    sourceProvider.models.map((m) => m.id)
+  );
+
+  if (!sourceModelId) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const sourceModel = sourceProvider.models.find((m) => m.id === sourceModelId);
+  if (!sourceModel) {
+    ctx.ui.notify("Model not found", "error");
+    return;
+  }
+
+  // Select target provider
+  const targetProviderName = await ctx.ui.select(
+    "Select target provider:",
+    [...providers, "[Same provider]"]
+  );
+
+  if (!targetProviderName || targetProviderName === "[Same provider]") {
+    // Clone within same provider
+    const newModelId = await ctx.ui.input("New model ID:", sourceModelId);
+    if (!newModelId) {
+      ctx.ui.notify("Model ID is required", "error");
+      return;
+    }
+
+    if (sourceProvider.models.some((m) => m.id === newModelId)) {
+      ctx.ui.notify(`Model "${newModelId}" already exists in provider "${sourceProviderName}"`, "error");
+      return;
+    }
+
+    // Clone the model config
+    const clonedModel: ModelConfig = {
+      ...sourceModel,
+      id: newModelId,
+      name: newModelId,
+    };
+
+    sourceProvider.models.push(clonedModel);
+
+    if (saveConfig(config)) {
+      ctx.ui.notify(
+        `✓ Cloned "${sourceModelId}" to "${newModelId}" in provider "${sourceProviderName}"`,
+        "success"
+      );
+    } else {
+      ctx.ui.notify("Failed to save configuration", "error");
+    }
+  } else {
+    // Clone to different provider
+    const targetProvider = config.providers[targetProviderName];
+
+    const newModelId = await ctx.ui.input("New model ID:", sourceModelId);
+    if (!newModelId) {
+      ctx.ui.notify("Model ID is required", "error");
+      return;
+    }
+
+    if (targetProvider.models.some((m) => m.id === newModelId)) {
+      ctx.ui.notify(`Model "${newModelId}" already exists in provider "${targetProviderName}"`, "error");
+      return;
+    }
+
+    // Clone the model config
+    const clonedModel: ModelConfig = {
+      ...sourceModel,
+      id: newModelId,
+      name: newModelId,
+    };
+
+    targetProvider.models.push(clonedModel);
+
+    if (saveConfig(config)) {
+      ctx.ui.notify(
+        `✓ Cloned "${sourceModelId}" from "${sourceProviderName}" to "${newModelId}" in "${targetProviderName}"`,
+        "success"
+      );
+    } else {
+      ctx.ui.notify("Failed to save configuration", "error");
+    }
+  }
+}
+
 async function handleModelEdit(ctx: any): Promise<void> {
   const config = loadConfig();
   if (config === null) {
@@ -1397,13 +1544,16 @@ export default function (pi: ExtensionAPI) {
           return handleModelRemove(ctx);
         case "edit":
           return handleModelEdit(ctx);
+        case "clone":
+          return handleModelClone(ctx);
         default:
           ctx.ui.notify(
             "Model Management Commands:\n\n" +
             "/add-model add - Add model (interactive)\n" +
             "/add-model list [provider] - List models\n" +
             "/add-model remove - Remove model (interactive)\n" +
-            "/add-model edit - Edit model configuration (interactive)",
+            "/add-model edit - Edit model configuration (interactive)\n" +
+            "/add-model clone - Clone model to same or different provider",
             "info"
           );
       }
