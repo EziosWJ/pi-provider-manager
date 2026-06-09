@@ -364,6 +364,10 @@ pi -e ~/.pi/agent/extensions/provider-manager.ts
 
 [GitHub](https://github.com/EziosWJ/pi-provider-manager)에서 이슈 및 풀 리퀘스트를 환영합니다.
 
+## 커뮤니티
+
+💬 [Linux.do 커뮤니티](https://linux.do)에서 토론에 참여하세요 - Pi, AI, 오픈소스를 논의하는 친근한 중국어 기술 커뮤니티입니다.
+
 ## 라이선스
 
 MIT

@@ -364,6 +364,10 @@ pi -e ~/.pi/agent/extensions/provider-manager.ts
 
 [GitHub](https://github.com/EziosWJ/pi-provider-manager)でIssueとPull Requestを歓迎します。
 
+## コミュニティ
+
+💬 [Linux.do コミュニティ](https://linux.do)での議論に参加 - Pi、AI、オープンソースについて議論するフレンドリーな中国語技術コミュニティ。
+
 ## ライセンス
 
 MIT

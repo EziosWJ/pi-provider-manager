@@ -414,6 +414,10 @@ pi -e ~/.pi/agent/extensions/provider-manager.ts
 
 欢迎在 [GitHub](https://github.com/EziosWJ/pi-provider-manager) 提交 Issue 和 Pull Request。
 
+## 社区
+
+💬 加入 [Linux.do 社区](https://linux.do) 讨论 - 友好的中文技术社区，讨论 Pi、AI 和开源技术。
+
 ## 许可证
 
 MIT

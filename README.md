@@ -366,6 +366,10 @@ After adding providers and models, restart pi or run `/reload` to refresh the co
 
 Issues and pull requests welcome at [GitHub](https://github.com/EziosWJ/pi-provider-manager).
 
+## Community
+
+💬 Join the discussion at [Linux.do Community](https://linux.do) - A friendly Chinese tech community for Pi, AI, and open source discussions.
+
 ## License
 
 MIT

@@ -364,6 +364,10 @@ Después de añadir proveedores y modelos, reinicia pi o ejecuta `/reload` para 
 
 Issues y Pull Requests son bienvenidos en [GitHub](https://github.com/EziosWJ/pi-provider-manager).
 
+## Comunidad
+
+💬 Únete a la discusión en [Linux.do Community](https://linux.do) - Una comunidad tecnológica china amigable para discusiones sobre Pi, IA y código abierto.
+
 ## Licencia
 
 MIT
