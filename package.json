@@ -1,6 +1,6 @@
 {
   "name": "pi-provider-manager",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Interactive provider and model manager for pi coding agent",
   "main": "provider-manager.ts",
   "keywords": [

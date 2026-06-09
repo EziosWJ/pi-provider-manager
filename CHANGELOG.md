@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-06-09
+
+### Added
+- **Model discovery in `/add-model add`** - Choose between fetching models from provider or manual input
+  - For OpenAI-compatible providers: fetches available models from `/models` endpoint
+  - User selects from discovered models list
+  - Then auto-fetches configuration from OpenRouter
+  - Seamless discovery → select → configure workflow
+- **Batch OpenRouter query in `/provider import-models`** - New configuration mode
+  - "Use OpenRouter defaults (auto-fetch for each)" option
+  - Automatically fetches context window and max tokens for each model
+  - Each model gets accurate individual configuration
+  - Better than batch config which applies same values to all
+- **Model metadata display** - Shows additional info when listing models
+  - Displays `owned_by` (provider/organization) if available
+  - Example: `llama3.1:8b (meta-llama)`
+  - Helps identify model sources and distinguish official vs community models
+- **`/add-model clone` command** - Clone model configurations
+  - Clone within same provider or to different provider
+  - Copies all settings: reasoning, context, maxTokens, compat
+  - Useful for creating variants or migrating between providers
+- **`/provider export` command** - Export provider configuration to JSON file
+  - Includes all provider settings and models
+  - Version-tagged exports with timestamp
+  - Perfect for backups, sharing, or migration
+- **`/provider import` command** - Import provider configuration from JSON file
+  - Restores from backup or imports shared configs
+  - Conflict resolution: rename on duplicate
+  - Validates format before importing
+- **`/provider sync` command** - Synchronize models with provider
+  - Compares local vs remote model lists
+  - Shows sync plan (additions and removals)
+  - Auto-fetches OpenRouter info for new models
+  - Requires confirmation before applying changes
+  - Perfect after `ollama pull` or `ollama rm`
+- **`/provider clear-models` command** - Remove all models from a provider
+  - Clears all models while preserving provider configuration
+  - Requires explicit confirmation with warning
+  - Useful before re-syncing or starting fresh
+
+### Changed
+- **`/add-model add` workflow** - Now offers model discovery first
+  - OpenAI-compatible providers: fetch or manual choice
+  - Non-OpenAI providers: direct to manual input
+  - More intuitive for users who don't know model IDs
+- **`/provider sync` enhancement** - Now auto-configures new models
+  - Fetches contextWindow and maxTokens from OpenRouter
+  - New models are immediately usable without manual configuration
+  - Consistent with import-models behavior
+
+### Improved
+- Better user experience with smart defaults throughout
+- Consistent OpenRouter integration across all import/sync operations
+- More comprehensive help text with all new commands
+
 ## [1.3.0] - 2026-06-09
 
 ### Added
