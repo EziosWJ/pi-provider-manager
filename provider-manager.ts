@@ -243,9 +243,9 @@ export default function (pi: ExtensionAPI) {
         const api = await ctx.ui.select(
           "API type:",
           [
-            { label: "OpenAI Completions", value: "openai-completions" },
-            { label: "Anthropic Messages", value: "anthropic-messages" },
-            { label: "Google Generative AI", value: "google-generative-ai" },
+            "openai-completions",
+            "anthropic-messages",
+            "google-generative-ai",
           ]
         );
 
@@ -258,8 +258,8 @@ export default function (pi: ExtensionAPI) {
         const keyMethod = await ctx.ui.select(
           "API Key method:",
           [
-            { label: "Environment Variable (Recommended)", value: "env" },
-            { label: "Direct Input", value: "direct" },
+            "Environment Variable (Recommended)",
+            "Direct Input",
           ]
         );
 
@@ -269,7 +269,7 @@ export default function (pi: ExtensionAPI) {
         }
 
         let apiKey: string;
-        if (keyMethod === "env") {
+        if (keyMethod === "Environment Variable (Recommended)") {
           const envVar = await ctx.ui.input(
             "Environment variable name:",
             `${name.toUpperCase()}_API_KEY`
