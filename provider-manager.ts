@@ -766,12 +766,29 @@ async function handleProviderSync(ctx: any): Promise<void> {
       }
     }
 
-    // Add new models (with basic config)
-    for (const modelId of toAdd) {
-      provider.models.push({
-        id: modelId,
-        name: modelId,
-      });
+    // Add new models with OpenRouter info
+    if (toAdd.length > 0) {
+      ctx.ui.notify(`Fetching model info from OpenRouter for ${toAdd.length} new model(s)...`, "info");
+
+      for (const modelId of toAdd) {
+        const modelInfo = await fetchModelInfoFromOpenRouter(modelId);
+
+        const modelConfig: ModelConfig = {
+          id: modelId,
+          name: modelId,
+        };
+
+        if (modelInfo) {
+          if (modelInfo.contextWindow) {
+            modelConfig.contextWindow = modelInfo.contextWindow;
+          }
+          if (modelInfo.maxTokens) {
+            modelConfig.maxTokens = modelInfo.maxTokens;
+          }
+        }
+
+        provider.models.push(modelConfig);
+      }
     }
 
     if (saveConfig(config)) {
