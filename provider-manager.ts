@@ -791,6 +791,58 @@ async function handleProviderSync(ctx: any): Promise<void> {
   }
 }
 
+async function handleProviderClearModels(ctx: any): Promise<void> {
+  const config = loadConfig();
+  if (config === null) {
+    ctx.ui.notify("Failed to load models.json", "error");
+    return;
+  }
+
+  const providers = Object.keys(config.providers);
+
+  if (providers.length === 0) {
+    ctx.ui.notify("No providers configured", "info");
+    return;
+  }
+
+  const providerName = await ctx.ui.select(
+    "Select provider to clear models from:",
+    providers
+  );
+
+  if (!providerName) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const provider = config.providers[providerName];
+
+  if (provider.models.length === 0) {
+    ctx.ui.notify(`Provider "${providerName}" has no models`, "info");
+    return;
+  }
+
+  const modelCount = provider.models.length;
+
+  const ok = await ctx.ui.confirm(
+    `Delete all ${modelCount} model(s) from provider "${providerName}"?\nThis action cannot be undone.`,
+    "Clear all models"
+  );
+
+  if (!ok) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  provider.models = [];
+
+  if (saveConfig(config)) {
+    ctx.ui.notify(`✓ Cleared ${modelCount} model(s) from provider "${providerName}"`, "success");
+  } else {
+    ctx.ui.notify("Failed to save configuration", "error");
+  }
+}
+
 // __CONTINUE_HERE_2__
 
 async function handleProviderImportModels(ctx: any): Promise<void> {
@@ -1794,6 +1846,8 @@ export default function (pi: ExtensionAPI) {
           return handleProviderDoctor(ctx);
         case "import-models":
           return handleProviderImportModels(ctx);
+        case "clear-models":
+          return handleProviderClearModels(ctx);
         case "export":
           return handleProviderExport(ctx);
         case "import":
@@ -1809,6 +1863,7 @@ export default function (pi: ExtensionAPI) {
             "/provider test - Test provider connection (interactive)\n" +
             "/provider doctor - Run diagnostics\n" +
             "/provider import-models - Import models from provider (interactive)\n" +
+            "/provider clear-models - Clear all models from provider (interactive)\n" +
             "/provider export - Export provider config to JSON file\n" +
             "/provider import - Import provider config from JSON file\n" +
             "/provider sync - Sync models with provider (add new, remove deleted)\n\n" +
