@@ -8,14 +8,17 @@
 
 ✨ **交互式界面** - 所有操作都使用 pi 内置的选择/输入/确认对话框  
 🔧 **Provider 管理** - 添加、列出、删除和测试自定义 provider  
-📦 **模型管理** - 为每个 provider 添加、列出和删除模型  
+📦 **模型管理** - 为每个 provider 添加、列出、删除和编辑模型  
 🌐 **多 API 支持** - OpenAI Completions、Anthropic Messages、Google Generative AI  
 🔒 **安全的 API 密钥** - 支持环境变量（推荐）并提供明文警告  
 🛡️ **自动备份** - 带时间戳的备份和轮换（保留最近 10 个）  
 🏥 **健康检查** - 使用 `/provider doctor` 进行内置诊断  
 ⚡ **真实测试** - 测试 `/models` 和 `/chat/completions` 两个端点  
 🎯 **高级配置** - 推理、兼容性、上下文窗口设置  
-🚀 **模型发现** - 使用 `/provider import-models` 从 provider 自动导入模型
+🚀 **模型发现** - 使用 `/provider import-models` 从 provider 自动导入模型  
+✏️ **编辑模型** - 使用 `/add-model edit` 修改已导入模型的配置  
+🔍 **智能过滤** - 关键词过滤，处理大量模型列表  
+⚡ **标签模式** - 快速 y/n/s 选择，用于模型导入
 
 ## 安装
 
@@ -68,9 +71,13 @@ Use /provider or /add-model to manage configurations
 #### `/provider import-models` - 自动导入模型
 从 provider 自动发现和导入模型：
 - 从 `/models` 端点获取可用模型
-- 显示新模型列表（已存在的会被跳过）
-- 批量导入多个模型
-- 批量配置高级选项（推理、兼容性等）
+- **关键词过滤**缩小大量模型列表范围
+- **标签模式**（y/n/s）快速选择模型
+- 三种导入模式："导入全部" / "标签模式" / "取消"
+- 三种配置模式：
+  - **使用默认值** - 快速导入，无需配置
+  - **批量配置** - 为所有选定模型应用相同设置
+  - **单独配置** - 分别配置每个模型
 
 #### `/provider doctor` - 运行诊断
 检查配置健康状况：
@@ -96,6 +103,18 @@ Use /provider or /add-model to manage configurations
 - 不带参数：列出所有 provider 的所有模型
 - 带 provider 名称：只列出该 provider 的模型
 - 显示指示器：`[reasoning]`、`[compat]`
+
+#### `/add-model edit` - 编辑现有模型配置
+用于修改模型设置的交互式编辑器：
+- 选择 provider 和模型
+- 显示当前配置
+- 基于循环的编辑器，可修改多个设置：
+  - 模型名称
+  - 推理支持
+  - 上下文窗口
+  - 最大输出 token 数
+  - 兼容性设置
+- 可以清除可选字段
 
 #### `/add-model remove` - 删除模型
 交互式提示：
@@ -160,19 +179,102 @@ export OLLAMA_API_KEY=ollama
 
 ```bash
 /provider import-models
-# Select provider: ollama
+# Select provider to import models from: ollama
 # Fetching models from ollama...
+# Found 50 new model(s):
+#   • llama3.1:8b
+#   • llama3.2:1b
+#   • qwen2.5-coder:7b
+#   ... and 47 more
 # 
-# Found 3 new models:
-# • llama3.1:8b
-# • qwen2.5-coder:7b
-# • deepseek-r1:7b
+# Filter by keyword (optional, press Enter to skip): llama
+# Filtered from 50 to 8 model(s) matching "llama"
 # 
-# Import all models? Yes
-# Configure advanced options? Yes
-# Does this model support reasoning? Yes (applies to all)
+# Found 8 new model(s):
+#   • llama3.1:8b
+#   • llama3.1:70b
+#   • llama3.2:1b
+#   ... and 5 more
 # 
-# ✓ Successfully imported 3 models
+# Import mode:
+#   → Import all
+#   → Tag mode (y/n/s)
+#   → Cancel
+# 
+# [Select: Tag mode]
+# 
+# Tag mode: y=yes (import), n=no (skip), s=skip remaining
+# Press Enter after each choice
+# 
+# llama3.1:8b (1/8):
+#   → y - Import this model
+#   → n - Skip this model
+#   → s - Skip remaining
+# 
+# [Select: y]
+# 
+# llama3.1:70b (2/8):
+#   → y - Import this model
+#   → n - Skip this model
+#   → s - Skip remaining
+# 
+# [Select: n]
+# 
+# llama3.2:1b (3/8):
+#   → y - Import this model
+#   → n - Skip this model
+#   → s - Skip remaining
+# 
+# [Select: s - skips remaining 6 models]
+# 
+# Configure 2 selected model(s):
+#   → Use defaults (no config)
+#   → Batch config (same for all)
+#   → Individual config (one by one)
+# 
+# [Select: Batch config]
+# Do these models support reasoning? No
+# Context window (optional, e.g., 128000): 128000
+# Max output tokens (optional, e.g., 4096): 4096
+# ✓ Successfully imported 2 model(s) to provider "ollama"
+```
+
+### 编辑模型配置
+
+```bash
+/add-model edit
+# Select provider: ollama
+# Select model to edit: llama3.1:8b
+# 
+# Current configuration for "llama3.1:8b":
+#   ID: llama3.1:8b
+#   Name: Llama 3.1 8B
+#   Reasoning: No
+#   Context window: 128000
+#   Max tokens: 4096
+# 
+# What to edit?
+#   → Model name
+#   → Reasoning support
+#   → Context window
+#   → Max output tokens
+#   → Compatibility settings
+#   → Done (save changes)
+# 
+# [Select: Context window]
+# Context window (e.g., 128000, or empty to clear): 200000
+# ✓ Context window: 200000
+# 
+# What to edit?
+#   → Model name
+#   → Reasoning support
+#   → Context window
+#   → Max output tokens
+#   → Compatibility settings
+#   → Done (save changes)
+# 
+# [Select: Done]
+# ✓ Model "llama3.1:8b" updated successfully
 ```
 
 ### 运行诊断

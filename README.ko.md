@@ -8,14 +8,17 @@
 
 ✨ **대화형 UI** - 모든 작업에서 pi의 내장 선택/입력/확인 대화상자 사용  
 🔧 **프로바이더 관리** - 사용자 정의 프로바이더 추가, 나열, 제거, 테스트  
-📦 **모델 관리** - 각 프로바이더의 모델 추가, 나열, 제거  
+📦 **모델 관리** - 각 프로바이더의 모델 추가, 나열, 제거, 편집  
 🌐 **다중 API 지원** - OpenAI Completions, Anthropic Messages, Google Generative AI  
 🔒 **안전한 API 키** - 환경 변수 지원(권장) 및 평문 경고  
 🛡️ **자동 백업** - 타임스탬프가 있는 백업 및 순환(최근 10개 유지)  
 🏥 **상태 확인** - `/provider doctor`를 통한 내장 진단  
 ⚡ **실제 테스트** - `/models`와 `/chat/completions` 두 엔드포인트 모두 테스트  
 🎯 **고급 설정** - 추론, 호환성, 컨텍스트 윈도우 설정  
-🚀 **모델 검색** - `/provider import-models`로 프로바이더에서 모델 자동 가져오기
+🚀 **모델 검색** - `/provider import-models`로 프로바이더에서 모델 자동 가져오기  
+✏️ **모델 편집** - `/add-model edit`로 가져온 후 모델 설정 수정  
+🔍 **스마트 필터링** - 대규모 모델 목록을 위한 키워드 필터  
+⚡ **태그 모드** - y/n/s를 사용한 빠른 모델 선택
 
 ## 설치
 
@@ -68,9 +71,13 @@ Use /provider or /add-model to manage configurations
 #### `/provider import-models` - 모델 자동 가져오기
 프로바이더에서 모델 자동 검색 및 가져오기:
 - `/models` 엔드포인트에서 사용 가능한 모델 가져오기
-- 새 모델 목록 표시(기존 모델은 건너뜀)
-- 여러 모델 일괄 가져오기
-- 고급 옵션 일괄 구성(추론, 호환성 등)
+- **키워드 필터**로 대규모 모델 목록 범위 좁히기
+- **태그 모드**(y/n/s)로 빠른 모델 선택
+- 3가지 가져오기 모드: "모두 가져오기" / "태그 모드" / "취소"
+- 3가지 설정 모드:
+  - **기본값 사용** - 설정 없이 빠른 가져오기
+  - **일괄 설정** - 선택한 모든 모델에 동일한 설정 적용
+  - **개별 설정** - 각 모델을 개별적으로 설정
 
 #### `/provider doctor` - 진단 실행
 설정 상태 확인:
@@ -96,6 +103,18 @@ Use /provider or /add-model to manage configurations
 - 인수 없음: 모든 프로바이더의 모든 모델 나열
 - 프로바이더 이름 포함: 해당 프로바이더의 모델만 나열
 - 표시기 표시: `[reasoning]`, `[compat]`
+
+#### `/add-model edit` - 기존 모델 설정 편집
+모델 설정을 수정하기 위한 대화형 편집기:
+- 프로바이더와 모델 선택
+- 현재 설정 표시
+- 여러 설정을 수정할 수 있는 루프 기반 편집기:
+  - 모델 이름
+  - 추론 지원
+  - 컨텍스트 윈도우
+  - 최대 출력 토큰 수
+  - 호환성 설정
+- 선택적 필드 지우기 가능
 
 #### `/add-model remove` - 모델 제거
 대화형 프롬프트:
@@ -160,19 +179,102 @@ export OLLAMA_API_KEY=ollama
 
 ```bash
 /provider import-models
-# Select provider: ollama
+# Select provider to import models from: ollama
 # Fetching models from ollama...
+# Found 50 new model(s):
+#   • llama3.1:8b
+#   • llama3.2:1b
+#   • qwen2.5-coder:7b
+#   ... and 47 more
 # 
-# Found 3 new models:
-# • llama3.1:8b
-# • qwen2.5-coder:7b
-# • deepseek-r1:7b
+# Filter by keyword (optional, press Enter to skip): llama
+# Filtered from 50 to 8 model(s) matching "llama"
 # 
-# Import all models? Yes
-# Configure advanced options? Yes
-# Does this model support reasoning? Yes (applies to all)
+# Found 8 new model(s):
+#   • llama3.1:8b
+#   • llama3.1:70b
+#   • llama3.2:1b
+#   ... and 5 more
 # 
-# ✓ Successfully imported 3 models
+# Import mode:
+#   → Import all
+#   → Tag mode (y/n/s)
+#   → Cancel
+# 
+# [Select: Tag mode]
+# 
+# Tag mode: y=yes (import), n=no (skip), s=skip remaining
+# Press Enter after each choice
+# 
+# llama3.1:8b (1/8):
+#   → y - Import this model
+#   → n - Skip this model
+#   → s - Skip remaining
+# 
+# [Select: y]
+# 
+# llama3.1:70b (2/8):
+#   → y - Import this model
+#   → n - Skip this model
+#   → s - Skip remaining
+# 
+# [Select: n]
+# 
+# llama3.2:1b (3/8):
+#   → y - Import this model
+#   → n - Skip this model
+#   → s - Skip remaining
+# 
+# [Select: s - skips remaining 6 models]
+# 
+# Configure 2 selected model(s):
+#   → Use defaults (no config)
+#   → Batch config (same for all)
+#   → Individual config (one by one)
+# 
+# [Select: Batch config]
+# Do these models support reasoning? No
+# Context window (optional, e.g., 128000): 128000
+# Max output tokens (optional, e.g., 4096): 4096
+# ✓ Successfully imported 2 model(s) to provider "ollama"
+```
+
+### 모델 설정 편집
+
+```bash
+/add-model edit
+# Select provider: ollama
+# Select model to edit: llama3.1:8b
+# 
+# Current configuration for "llama3.1:8b":
+#   ID: llama3.1:8b
+#   Name: Llama 3.1 8B
+#   Reasoning: No
+#   Context window: 128000
+#   Max tokens: 4096
+# 
+# What to edit?
+#   → Model name
+#   → Reasoning support
+#   → Context window
+#   → Max output tokens
+#   → Compatibility settings
+#   → Done (save changes)
+# 
+# [Select: Context window]
+# Context window (e.g., 128000, or empty to clear): 200000
+# ✓ Context window: 200000
+# 
+# What to edit?
+#   → Model name
+#   → Reasoning support
+#   → Context window
+#   → Max output tokens
+#   → Compatibility settings
+#   → Done (save changes)
+# 
+# [Select: Done]
+# ✓ Model "llama3.1:8b" updated successfully
 ```
 
 ### 진단 실행

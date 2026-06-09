@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-06-09
+
+### Added
+- **`/add-model edit` command** - Edit existing model configurations
+  - Interactive loop-based editor
+  - Edit model name, reasoning support, context window, max tokens
+  - Edit compatibility settings (developer role, reasoning effort)
+  - Shows current configuration before editing
+  - Can clear optional fields by entering empty values
+- **Keyword filter for import-models**
+  - Filter models by keyword before importing
+  - Case-insensitive matching
+  - Shows filtered count (e.g., "Filtered from 50 to 8 model(s)")
+- **Tag mode for model selection** (`y/n/s`)
+  - Fast single-letter selection: `y` (import), `n` (skip), `s` (skip remaining)
+  - Shows progress counter (e.g., "1/50")
+  - Clear instruction message at start
+  - Similar to `git add -p` interaction pattern
+
+### Changed
+- **Improved import-models workflow**:
+  - Import modes: "Import all" / "Tag mode (y/n/s)" / "Cancel"
+  - Configuration modes: "Use defaults" / "Batch config" / "Individual config"
+  - Replaced "Select one by one" with clearer tag mode
+  - Individual config mode now configures each model separately
+- Help text updated to include `/add-model edit`
+
+### Improved
+- Better user feedback during model selection
+- Clearer option labels in tag mode
+- More flexible configuration options
+
 ## [1.2.0] - 2026-06-09
 
 ### Added
@@ -46,8 +78,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `compat` settings (supportsDeveloperRole, supportsReasoningEffort)
   - `contextWindow` configuration
   - `maxTokens` configuration
-  - `cost` structure (input, output, cacheRead, cacheWrite)
-  - `thinkingLevelMap` support
 - Error recovery: failed config loads no longer overwrite existing configuration
 - Better API key display (shows `$VAR (env)` for environment variables, `***` for plaintext)
 

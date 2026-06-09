@@ -8,14 +8,17 @@ Gestor interactivo de proveedores y modelos para [pi coding agent](https://githu
 
 ✨ **Interfaz Interactiva** - Todas las operaciones usan los diálogos integrados de selección/entrada/confirmación de pi  
 🔧 **Gestión de Proveedores** - Añadir, listar, eliminar y probar proveedores personalizados  
-📦 **Gestión de Modelos** - Añadir, listar y eliminar modelos para cada proveedor  
+📦 **Gestión de Modelos** - Añadir, listar, eliminar y editar modelos para cada proveedor  
 🌐 **Soporte Multi-API** - OpenAI Completions, Anthropic Messages, Google Generative AI  
 🔒 **Claves API Seguras** - Soporte de variables de entorno (recomendado) con advertencias de texto plano  
 🛡️ **Respaldo Automático** - Respaldos con marca de tiempo y rotación (mantiene los 10 más recientes)  
 🏥 **Verificación de Salud** - Diagnóstico integrado con `/provider doctor`  
 ⚡ **Pruebas Reales** - Prueba tanto los endpoints `/models` como `/chat/completions`  
 🎯 **Configuración Avanzada** - Razonamiento, compatibilidad, configuración de ventana de contexto  
-🚀 **Descubrimiento de Modelos** - Auto-importar modelos desde proveedores con `/provider import-models`
+🚀 **Descubrimiento de Modelos** - Auto-importar modelos desde proveedores con `/provider import-models`  
+✏️ **Editar Modelos** - Modificar configuraciones de modelos después de importar con `/add-model edit`  
+🔍 **Filtrado Inteligente** - Filtro por palabra clave para listas grandes de modelos  
+⚡ **Modo de Etiquetado** - Selección rápida y/n/s para importar modelos
 
 ## Instalación
 
@@ -68,9 +71,13 @@ Realiza pruebas de conectividad completas:
 #### `/provider import-models` - Auto-importar modelos
 Descubre e importa modelos automáticamente desde el proveedor:
 - Obtiene modelos disponibles desde el endpoint `/models`
-- Muestra lista de modelos nuevos (omite los existentes)
-- Importa múltiples modelos por lote
-- Configura opciones avanzadas por lote (razonamiento, compatibilidad, etc.)
+- **Filtro por palabra clave** para reducir listas grandes de modelos
+- **Modo de etiquetado** (y/n/s) para selección rápida de modelos
+- Tres modos de importación: "Importar todo" / "Modo de etiquetado" / "Cancelar"
+- Tres modos de configuración:
+  - **Usar valores predeterminados** - Importación rápida sin configuración
+  - **Configuración por lotes** - Mismos ajustes para todos los modelos seleccionados
+  - **Configuración individual** - Configurar cada modelo por separado
 
 #### `/provider doctor` - Ejecutar diagnósticos
 Verificación de salud de tu configuración:
@@ -96,6 +103,18 @@ Indicaciones interactivas:
 - Sin argumento: lista todos los modelos de todos los proveedores
 - Con nombre de proveedor: lista solo los modelos de ese proveedor
 - Muestra indicadores: `[reasoning]`, `[compat]`
+
+#### `/add-model edit` - Editar configuración de modelo existente
+Editor interactivo para modificar ajustes de modelos:
+- Seleccionar proveedor y modelo
+- Muestra la configuración actual
+- Editor basado en bucle para modificar múltiples ajustes:
+  - Nombre del modelo
+  - Soporte de razonamiento
+  - Ventana de contexto
+  - Tokens máximos de salida
+  - Configuración de compatibilidad
+- Puede limpiar campos opcionales
 
 #### `/add-model remove` - Eliminar modelo
 Indicaciones interactivas:
@@ -160,19 +179,102 @@ export OLLAMA_API_KEY=ollama
 
 ```bash
 /provider import-models
-# Select provider: ollama
+# Select provider to import models from: ollama
 # Fetching models from ollama...
+# Found 50 new model(s):
+#   • llama3.1:8b
+#   • llama3.2:1b
+#   • qwen2.5-coder:7b
+#   ... and 47 more
 # 
-# Found 3 new models:
-# • llama3.1:8b
-# • qwen2.5-coder:7b
-# • deepseek-r1:7b
+# Filter by keyword (optional, press Enter to skip): llama
+# Filtered from 50 to 8 model(s) matching "llama"
 # 
-# Import all models? Yes
-# Configure advanced options? Yes
-# Does this model support reasoning? Yes (applies to all)
+# Found 8 new model(s):
+#   • llama3.1:8b
+#   • llama3.1:70b
+#   • llama3.2:1b
+#   ... and 5 more
 # 
-# ✓ Successfully imported 3 models
+# Import mode:
+#   → Import all
+#   → Tag mode (y/n/s)
+#   → Cancel
+# 
+# [Select: Tag mode]
+# 
+# Tag mode: y=yes (import), n=no (skip), s=skip remaining
+# Press Enter after each choice
+# 
+# llama3.1:8b (1/8):
+#   → y - Import this model
+#   → n - Skip this model
+#   → s - Skip remaining
+# 
+# [Select: y]
+# 
+# llama3.1:70b (2/8):
+#   → y - Import this model
+#   → n - Skip this model
+#   → s - Skip remaining
+# 
+# [Select: n]
+# 
+# llama3.2:1b (3/8):
+#   → y - Import this model
+#   → n - Skip this model
+#   → s - Skip remaining
+# 
+# [Select: s - skips remaining 6 models]
+# 
+# Configure 2 selected model(s):
+#   → Use defaults (no config)
+#   → Batch config (same for all)
+#   → Individual config (one by one)
+# 
+# [Select: Batch config]
+# Do these models support reasoning? No
+# Context window (optional, e.g., 128000): 128000
+# Max output tokens (optional, e.g., 4096): 4096
+# ✓ Successfully imported 2 model(s) to provider "ollama"
+```
+
+### Editar Configuración de Modelo
+
+```bash
+/add-model edit
+# Select provider: ollama
+# Select model to edit: llama3.1:8b
+# 
+# Current configuration for "llama3.1:8b":
+#   ID: llama3.1:8b
+#   Name: Llama 3.1 8B
+#   Reasoning: No
+#   Context window: 128000
+#   Max tokens: 4096
+# 
+# What to edit?
+#   → Model name
+#   → Reasoning support
+#   → Context window
+#   → Max output tokens
+#   → Compatibility settings
+#   → Done (save changes)
+# 
+# [Select: Context window]
+# Context window (e.g., 128000, or empty to clear): 200000
+# ✓ Context window: 200000
+# 
+# What to edit?
+#   → Model name
+#   → Reasoning support
+#   → Context window
+#   → Max output tokens
+#   → Compatibility settings
+#   → Done (save changes)
+# 
+# [Select: Done]
+# ✓ Model "llama3.1:8b" updated successfully
 ```
 
 ### Ejecutar Diagnósticos

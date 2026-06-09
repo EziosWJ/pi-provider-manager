@@ -8,14 +8,17 @@ Interactive provider and model manager for [pi coding agent](https://github.com/
 
 ✨ **Interactive UI** - All operations use pi's built-in select/input/confirm dialogs  
 🔧 **Provider Management** - Add, list, remove, and test custom providers  
-📦 **Model Management** - Add, list, and remove models for each provider  
+📦 **Model Management** - Add, list, remove, and edit models for each provider  
 🌐 **Multi-API Support** - OpenAI Completions, Anthropic Messages, Google Generative AI  
 🔒 **Secure API Keys** - Environment variable support (recommended) with plaintext warnings  
 🛡️ **Auto Backup** - Timestamped backups with rotation (keeps 10 most recent)  
 🏥 **Health Check** - Built-in diagnostics with `/provider doctor`  
 ⚡ **Real Testing** - Tests both `/models` and `/chat/completions` endpoints  
 🎯 **Advanced Config** - Reasoning, compat, context window settings  
-🚀 **Model Discovery** - Auto-import models from providers with `/provider import-models`
+🚀 **Model Discovery** - Auto-import models from providers with `/provider import-models`  
+✏️ **Edit Models** - Modify model configurations after import with `/add-model edit`  
+🔍 **Smart Filtering** - Keyword filter for large model lists  
+⚡ **Tag Mode** - Fast y/n/s selection for model import
 
 ## Installation
 
@@ -75,9 +78,13 @@ Health check for your configuration:
 #### `/provider import-models` - Auto-discover and import models
 Automatically fetch and import models from OpenAI-compatible providers:
 - Fetches available models from `/models` endpoint
-- Shows new models not yet imported
-- Supports batch import or selective import
-- Batch configuration for reasoning, context window, max tokens
+- **Keyword filter** to narrow down large model lists
+- **Tag mode** (y/n/s) for fast model selection
+- Three import modes: "Import all" / "Tag mode" / "Cancel"
+- Three configuration modes:
+  - **Use defaults** - Quick import without configuration
+  - **Batch config** - Same settings for all selected models
+  - **Individual config** - Configure each model separately
 
 ### Model Commands
 
@@ -96,6 +103,18 @@ Interactive prompts:
 - Without argument: lists all models from all providers
 - With provider name: lists models for that provider only
 - Shows indicators: `[reasoning]`, `[compat]`
+
+#### `/add-model edit` - Edit existing model configuration
+Interactive editor for modifying model settings:
+- Select provider and model
+- Shows current configuration
+- Loop-based editor to modify multiple settings:
+  - Model name
+  - Reasoning support
+  - Context window
+  - Max output tokens
+  - Compatibility settings
+- Can clear optional fields
 
 #### `/add-model remove` - Remove a model
 Interactive prompts:
@@ -158,19 +177,100 @@ export OLLAMA_API_KEY=ollama
 /provider import-models
 # Select provider to import models from: ollama
 # Fetching models from ollama...
-# Found 15 new model(s):
-# 
+# Found 50 new model(s):
 #   • llama3.1:8b
+#   • llama3.2:1b
 #   • qwen2.5-coder:7b
-#   • deepseek-coder:6.7b
-#   ... and 12 more
+#   ... and 47 more
 # 
-# Import all 15 model(s)? Yes
-# Apply default configuration to all imported models? Yes
+# Filter by keyword (optional, press Enter to skip): llama
+# Filtered from 50 to 8 model(s) matching "llama"
+# 
+# Found 8 new model(s):
+#   • llama3.1:8b
+#   • llama3.1:70b
+#   • llama3.2:1b
+#   ... and 5 more
+# 
+# Import mode:
+#   → Import all
+#   → Tag mode (y/n/s)
+#   → Cancel
+# 
+# [Select: Tag mode]
+# 
+# Tag mode: y=yes (import), n=no (skip), s=skip remaining
+# Press Enter after each choice
+# 
+# llama3.1:8b (1/8):
+#   → y - Import this model
+#   → n - Skip this model
+#   → s - Skip remaining
+# 
+# [Select: y]
+# 
+# llama3.1:70b (2/8):
+#   → y - Import this model
+#   → n - Skip this model
+#   → s - Skip remaining
+# 
+# [Select: n]
+# 
+# llama3.2:1b (3/8):
+#   → y - Import this model
+#   → n - Skip this model
+#   → s - Skip remaining
+# 
+# [Select: s - skips remaining 6 models]
+# 
+# Configure 2 selected model(s):
+#   → Use defaults (no config)
+#   → Batch config (same for all)
+#   → Individual config (one by one)
+# 
+# [Select: Batch config]
 # Do these models support reasoning? No
-# Context window (optional, e.g., 128000): 32768
+# Context window (optional, e.g., 128000): 128000
 # Max output tokens (optional, e.g., 4096): 4096
-# ✓ Successfully imported 15 model(s) to provider "ollama"
+# ✓ Successfully imported 2 model(s) to provider "ollama"
+```
+
+### Edit Model Configuration
+
+```bash
+/add-model edit
+# Select provider: ollama
+# Select model to edit: llama3.1:8b
+# 
+# Current configuration for "llama3.1:8b":
+#   ID: llama3.1:8b
+#   Name: Llama 3.1 8B
+#   Reasoning: No
+#   Context window: 128000
+#   Max tokens: 4096
+# 
+# What to edit?
+#   → Model name
+#   → Reasoning support
+#   → Context window
+#   → Max output tokens
+#   → Compatibility settings
+#   → Done (save changes)
+# 
+# [Select: Context window]
+# Context window (e.g., 128000, or empty to clear): 200000
+# ✓ Context window: 200000
+# 
+# What to edit?
+#   → Model name
+#   → Reasoning support
+#   → Context window
+#   → Max output tokens
+#   → Compatibility settings
+#   → Done (save changes)
+# 
+# [Select: Done]
+# ✓ Model "llama3.1:8b" updated successfully
 ```
 
 ### Run Diagnostics
