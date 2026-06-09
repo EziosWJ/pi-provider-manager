@@ -595,7 +595,7 @@ async function handleProviderImportModels(ctx: any): Promise<void> {
     // Import mode selection
     const importMode = await ctx.ui.select("Import mode:", [
       "Import all",
-      "Select one by one",
+      "Tag mode (y/n/s)",
       "Cancel",
     ]);
 
@@ -609,21 +609,33 @@ async function handleProviderImportModels(ctx: any): Promise<void> {
     if (importMode === "Import all") {
       selectedModels = newModels;
     } else {
-      // Select one by one
+      // Tag mode: y/n/s
+      ctx.ui.notify(
+        "Tag mode: y=yes (import), n=no (skip), s=skip remaining\n" +
+        "Press Enter after each choice",
+        "info"
+      );
+
       for (let i = 0; i < newModels.length; i++) {
         const modelId = newModels[i];
         const choice = await ctx.ui.select(
-          `Select model to import (${i + 1}/${newModels.length}):`,
-          [modelId, "[Skip remaining]"]
+          `${modelId} (${i + 1}/${newModels.length}):`,
+          ["y - Import this model", "n - Skip this model", "s - Skip remaining"]
         );
 
-        if (choice === "[Skip remaining]") {
+        if (!choice) {
           break;
         }
 
-        if (choice === modelId) {
+        if (choice.startsWith("s")) {
+          // Skip remaining
+          break;
+        }
+
+        if (choice.startsWith("y")) {
           selectedModels.push(modelId);
         }
+        // If 'n', just continue to next
       }
     }
 
