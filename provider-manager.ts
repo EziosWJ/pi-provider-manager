@@ -652,6 +652,145 @@ async function handleProviderImport(ctx: any): Promise<void> {
   }
 }
 
+async function handleProviderSync(ctx: any): Promise<void> {
+  const config = loadConfig();
+  if (config === null) {
+    ctx.ui.notify("Failed to load models.json", "error");
+    return;
+  }
+
+  const providers = Object.keys(config.providers);
+
+  if (providers.length === 0) {
+    ctx.ui.notify("No providers configured", "info");
+    return;
+  }
+
+  const providerName = await ctx.ui.select("Select provider to sync:", providers);
+
+  if (!providerName) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const provider = config.providers[providerName];
+
+  if (provider.api !== "openai-completions") {
+    ctx.ui.notify("Sync is only supported for OpenAI-compatible APIs", "error");
+    return;
+  }
+
+  ctx.ui.notify(`Syncing models from ${providerName}...`, "info");
+
+  let apiKey = provider.apiKey;
+  if (apiKey.startsWith("$")) {
+    const envVar = apiKey.slice(1);
+    apiKey = process.env[envVar] || "";
+    if (!apiKey) {
+      ctx.ui.notify(`Environment variable ${envVar} is not set`, "error");
+      return;
+    }
+  }
+
+  try {
+    const response = await fetch(`${provider.baseUrl}/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      ctx.ui.notify(`Failed to fetch models: HTTP ${response.status}`, "error");
+      return;
+    }
+
+    const data = await response.json();
+    const remoteModels = data.data || [];
+
+    if (remoteModels.length === 0) {
+      ctx.ui.notify("No models found on remote", "info");
+      return;
+    }
+
+    const remoteModelIds = new Set(remoteModels.map((m: any) => m.id));
+    const localModelIds = new Set(provider.models.map((m) => m.id));
+
+    // Find models to add (in remote but not local)
+    const toAdd = remoteModels
+      .filter((m: any) => !localModelIds.has(m.id))
+      .map((m: any) => m.id);
+
+    // Find models to remove (in local but not remote)
+    const toRemove = provider.models
+      .filter((m) => !remoteModelIds.has(m.id))
+      .map((m) => m.id);
+
+    if (toAdd.length === 0 && toRemove.length === 0) {
+      ctx.ui.notify("✓ All models are in sync", "success");
+      return;
+    }
+
+    // Show sync plan
+    let syncPlan = `Sync plan for "${providerName}":\n\n`;
+    if (toAdd.length > 0) {
+      syncPlan += `+ Add ${toAdd.length} model(s):\n`;
+      syncPlan += toAdd.slice(0, 5).map((id) => `  + ${id}`).join("\n");
+      if (toAdd.length > 5) {
+        syncPlan += `\n  ... and ${toAdd.length - 5} more`;
+      }
+      syncPlan += "\n\n";
+    }
+    if (toRemove.length > 0) {
+      syncPlan += `- Remove ${toRemove.length} model(s):\n`;
+      syncPlan += toRemove.slice(0, 5).map((id) => `  - ${id}`).join("\n");
+      if (toRemove.length > 5) {
+        syncPlan += `\n  ... and ${toRemove.length - 5} more`;
+      }
+      syncPlan += "\n\n";
+    }
+
+    ctx.ui.notify(syncPlan, "info");
+
+    const proceed = await ctx.ui.confirm("Apply sync changes?", "Sync confirmation");
+
+    if (!proceed) {
+      ctx.ui.notify("Sync cancelled", "info");
+      return;
+    }
+
+    // Apply changes
+    // Remove deleted models
+    for (const modelId of toRemove) {
+      const index = provider.models.findIndex((m) => m.id === modelId);
+      if (index >= 0) {
+        provider.models.splice(index, 1);
+      }
+    }
+
+    // Add new models (with basic config)
+    for (const modelId of toAdd) {
+      provider.models.push({
+        id: modelId,
+        name: modelId,
+      });
+    }
+
+    if (saveConfig(config)) {
+      ctx.ui.notify(
+        `✓ Synced successfully\n  + Added: ${toAdd.length}\n  - Removed: ${toRemove.length}\n  = Total: ${provider.models.length} models`,
+        "success"
+      );
+    } else {
+      ctx.ui.notify("Failed to save configuration", "error");
+    }
+  } catch (error: any) {
+    if (error.name === "AbortError") {
+      ctx.ui.notify("Request timeout", "error");
+    } else {
+      ctx.ui.notify(`Error: ${error.message}`, "error");
+    }
+  }
+}
+
 // __CONTINUE_HERE_2__
 
 async function handleProviderImportModels(ctx: any): Promise<void> {
@@ -1628,6 +1767,8 @@ export default function (pi: ExtensionAPI) {
           return handleProviderExport(ctx);
         case "import":
           return handleProviderImport(ctx);
+        case "sync":
+          return handleProviderSync(ctx);
         default:
           ctx.ui.notify(
             "Provider Management Commands:\n\n" +
@@ -1638,7 +1779,8 @@ export default function (pi: ExtensionAPI) {
             "/provider doctor - Run diagnostics\n" +
             "/provider import-models - Import models from provider (interactive)\n" +
             "/provider export - Export provider config to JSON file\n" +
-            "/provider import - Import provider config from JSON file\n\n" +
+            "/provider import - Import provider config from JSON file\n" +
+            "/provider sync - Sync models with provider (add new, remove deleted)\n\n" +
             "APIs: openai-completions, anthropic-messages, google-generative-ai",
             "info"
           );
