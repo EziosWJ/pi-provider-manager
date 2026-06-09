@@ -856,10 +856,20 @@ async function handleProviderImportModels(ctx: any): Promise<void> {
     }
 
     const existingIds = new Set(provider.models.map((m) => m.id));
-    let newModels = models
+
+    // Store full model objects with metadata
+    const modelsWithMetadata = models
       .filter((m: any) => !existingIds.has(m.id))
-      .map((m: any) => m.id)
-      .sort();
+      .map((m: any) => ({
+        id: m.id,
+        metadata: {
+          owned_by: m.owned_by,
+          created: m.created,
+          object: m.object,
+        },
+      }));
+
+    let newModels = modelsWithMetadata.map((m: any) => m.id).sort();
 
     if (newModels.length === 0) {
       ctx.ui.notify("All available models are already imported", "info");
@@ -890,8 +900,29 @@ async function handleProviderImportModels(ctx: any): Promise<void> {
       newModels = filteredModels;
     }
 
+    // Display models with metadata
+    const displayModels = newModels.slice(0, 10).map((modelId: string) => {
+      const modelData = modelsWithMetadata.find((m: any) => m.id === modelId);
+      let display = `  • ${modelId}`;
+
+      if (modelData?.metadata) {
+        const meta = modelData.metadata;
+        const parts: string[] = [];
+
+        if (meta.owned_by && meta.owned_by !== "system") {
+          parts.push(meta.owned_by);
+        }
+
+        if (parts.length > 0) {
+          display += ` (${parts.join(", ")})`;
+        }
+      }
+
+      return display;
+    });
+
     ctx.ui.notify(
-      `Found ${newModels.length} new model(s):\n\n${newModels.slice(0, 10).map((m: string) => `  • ${m}`).join("\n")}` +
+      `Found ${newModels.length} new model(s):\n\n${displayModels.join("\n")}` +
       (newModels.length > 10 ? `\n  ... and ${newModels.length - 10} more` : ""),
       "info"
     );
