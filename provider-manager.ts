@@ -552,7 +552,7 @@ async function handleProviderImportModels(ctx: any): Promise<void> {
     }
 
     const existingIds = new Set(provider.models.map((m) => m.id));
-    const newModels = models
+    let newModels = models
       .filter((m: any) => !existingIds.has(m.id))
       .map((m: any) => m.id)
       .sort();
@@ -562,26 +562,66 @@ async function handleProviderImportModels(ctx: any): Promise<void> {
       return;
     }
 
+    // Add keyword filter
+    const filterKeyword = await ctx.ui.input(
+      "Filter by keyword (optional, press Enter to skip):",
+      ""
+    );
+
+    if (filterKeyword && filterKeyword.trim()) {
+      const keyword = filterKeyword.trim().toLowerCase();
+      const filteredModels = newModels.filter((m: string) =>
+        m.toLowerCase().includes(keyword)
+      );
+
+      if (filteredModels.length === 0) {
+        ctx.ui.notify(`No models match keyword "${keyword}"`, "info");
+        return;
+      }
+
+      ctx.ui.notify(
+        `Filtered from ${newModels.length} to ${filteredModels.length} model(s) matching "${keyword}"`,
+        "info"
+      );
+      newModels = filteredModels;
+    }
+
     ctx.ui.notify(
       `Found ${newModels.length} new model(s):\n\n${newModels.slice(0, 10).map((m: string) => `  • ${m}`).join("\n")}` +
       (newModels.length > 10 ? `\n  ... and ${newModels.length - 10} more` : ""),
       "info"
     );
 
-    const importAll = await ctx.ui.confirm(
-      `Import all ${newModels.length} model(s)?`,
-      "Import all"
-    );
+    // Import mode selection
+    const importMode = await ctx.ui.select("Import mode:", [
+      "Import all",
+      "Select one by one",
+      "Cancel",
+    ]);
+
+    if (!importMode || importMode === "Cancel") {
+      ctx.ui.notify("Import cancelled", "info");
+      return;
+    }
 
     let selectedModels: string[] = [];
 
-    if (importAll) {
+    if (importMode === "Import all") {
       selectedModels = newModels;
     } else {
-      const toAsk = newModels.slice(0, 20);
-      for (const modelId of toAsk) {
-        const shouldImport = await ctx.ui.confirm(`Import "${modelId}"?`, "Import model");
-        if (shouldImport) {
+      // Select one by one
+      for (let i = 0; i < newModels.length; i++) {
+        const modelId = newModels[i];
+        const choice = await ctx.ui.select(
+          `Select model to import (${i + 1}/${newModels.length}):`,
+          [modelId, "[Skip remaining]"]
+        );
+
+        if (choice === "[Skip remaining]") {
+          break;
+        }
+
+        if (choice === modelId) {
           selectedModels.push(modelId);
         }
       }
@@ -592,14 +632,35 @@ async function handleProviderImportModels(ctx: any): Promise<void> {
       return;
     }
 
-    const configureBatch = await ctx.ui.confirm(
-      "Apply default configuration to all imported models?",
-      "Batch configuration"
+    // Configuration mode
+    const configMode = await ctx.ui.select(
+      `Configure ${selectedModels.length} selected model(s):`,
+      [
+        "Use defaults (no config)",
+        "Batch config (same for all)",
+        "Individual config (one by one)",
+      ]
     );
 
-    let batchConfig: Partial<ModelConfig> = {};
+    if (!configMode) {
+      ctx.ui.notify("Import cancelled", "info");
+      return;
+    }
 
-    if (configureBatch) {
+    const modelConfigs: ModelConfig[] = [];
+
+    if (configMode === "Use defaults (no config)") {
+      // Import with defaults
+      for (const modelId of selectedModels) {
+        modelConfigs.push({
+          id: modelId,
+          name: modelId,
+        });
+      }
+    } else if (configMode === "Batch config (same for all)") {
+      // Batch configuration
+      let batchConfig: Partial<ModelConfig> = {};
+
       const reasoning = await ctx.ui.confirm(
         "Do these models support reasoning?",
         "Reasoning support"
@@ -630,14 +691,66 @@ async function handleProviderImportModels(ctx: any): Promise<void> {
           batchConfig.maxTokens = maxTokens;
         }
       }
+
+      for (const modelId of selectedModels) {
+        modelConfigs.push({
+          id: modelId,
+          name: modelId,
+          ...batchConfig,
+        });
+      }
+    } else {
+      // Individual configuration
+      for (const modelId of selectedModels) {
+        ctx.ui.notify(`Configuring: ${modelId}`, "info");
+
+        const modelName = await ctx.ui.input("Model name (optional):", modelId);
+
+        const reasoning = await ctx.ui.confirm(
+          "Does this model support reasoning?",
+          "Reasoning support"
+        );
+
+        const contextInput = await ctx.ui.input(
+          "Context window (optional, e.g., 128000):",
+          ""
+        );
+
+        const maxInput = await ctx.ui.input(
+          "Max output tokens (optional, e.g., 4096):",
+          ""
+        );
+
+        const modelConfig: ModelConfig = {
+          id: modelId,
+          name: modelName || modelId,
+        };
+
+        if (reasoning) {
+          modelConfig.reasoning = true;
+        }
+
+        if (contextInput) {
+          const contextWindow = parseInt(contextInput, 10);
+          if (!isNaN(contextWindow)) {
+            modelConfig.contextWindow = contextWindow;
+          }
+        }
+
+        if (maxInput) {
+          const maxTokens = parseInt(maxInput, 10);
+          if (!isNaN(maxTokens)) {
+            modelConfig.maxTokens = maxTokens;
+          }
+        }
+
+        modelConfigs.push(modelConfig);
+      }
     }
 
-    for (const modelId of selectedModels) {
-      provider.models.push({
-        id: modelId,
-        name: modelId,
-        ...batchConfig,
-      });
+    // Add all configured models
+    for (const modelConfig of modelConfigs) {
+      provider.models.push(modelConfig);
     }
 
     if (saveConfig(config)) {
@@ -903,6 +1016,155 @@ async function handleModelRemove(ctx: any): Promise<void> {
   }
 }
 
+async function handleModelEdit(ctx: any): Promise<void> {
+  const config = loadConfig();
+  if (config === null) {
+    ctx.ui.notify("Failed to load models.json", "error");
+    return;
+  }
+
+  const providers = Object.keys(config.providers);
+
+  if (providers.length === 0) {
+    ctx.ui.notify("No providers configured", "info");
+    return;
+  }
+
+  const providerName = await ctx.ui.select("Select provider:", providers);
+
+  if (!providerName) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const provider = config.providers[providerName];
+
+  if (provider.models.length === 0) {
+    ctx.ui.notify(`No models in provider "${providerName}"`, "info");
+    return;
+  }
+
+  const modelId = await ctx.ui.select(
+    "Select model to edit:",
+    provider.models.map((m) => m.id)
+  );
+
+  if (!modelId) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const modelIndex = provider.models.findIndex((m) => m.id === modelId);
+  if (modelIndex < 0) {
+    ctx.ui.notify(`Model "${modelId}" not found`, "error");
+    return;
+  }
+
+  const model = provider.models[modelIndex];
+
+  // Show current configuration
+  let currentConfig = `Current configuration for "${model.id}":\n\n`;
+  currentConfig += `  ID: ${model.id}\n`;
+  currentConfig += `  Name: ${model.name || model.id}\n`;
+  currentConfig += `  Reasoning: ${model.reasoning ? "Yes" : "No"}\n`;
+  currentConfig += `  Context window: ${model.contextWindow || "Not set"}\n`;
+  currentConfig += `  Max tokens: ${model.maxTokens || "Not set"}\n`;
+  if (model.compat) {
+    currentConfig += `  Compatibility:\n`;
+    currentConfig += `    Developer role: ${model.compat.supportsDeveloperRole ? "Yes" : "No"}\n`;
+    currentConfig += `    Reasoning effort: ${model.compat.supportsReasoningEffort ? "Yes" : "No"}\n`;
+  }
+  ctx.ui.notify(currentConfig, "info");
+
+  // Edit loop
+  while (true) {
+    const action = await ctx.ui.select("What to edit?", [
+      "Model name",
+      "Reasoning support",
+      "Context window",
+      "Max output tokens",
+      "Compatibility settings",
+      "Done (save changes)",
+    ]);
+
+    if (!action || action === "Done (save changes)") {
+      break;
+    }
+
+    if (action === "Model name") {
+      const newName = await ctx.ui.input("Model name:", model.name || model.id);
+      if (newName) {
+        model.name = newName;
+        ctx.ui.notify(`✓ Name updated to: ${newName}`, "success");
+      }
+    } else if (action === "Reasoning support") {
+      const reasoning = await ctx.ui.confirm(
+        "Does this model support reasoning?",
+        "Reasoning support"
+      );
+      model.reasoning = reasoning;
+      ctx.ui.notify(`✓ Reasoning support: ${reasoning ? "Yes" : "No"}`, "success");
+    } else if (action === "Context window") {
+      const contextInput = await ctx.ui.input(
+        "Context window (e.g., 128000, or empty to clear):",
+        model.contextWindow?.toString() || ""
+      );
+      if (contextInput === "") {
+        delete model.contextWindow;
+        ctx.ui.notify("✓ Context window cleared", "success");
+      } else if (contextInput) {
+        const contextWindow = parseInt(contextInput, 10);
+        if (isNaN(contextWindow)) {
+          ctx.ui.notify("Invalid number, not changed", "warning");
+        } else {
+          model.contextWindow = contextWindow;
+          ctx.ui.notify(`✓ Context window: ${contextWindow}`, "success");
+        }
+      }
+    } else if (action === "Max output tokens") {
+      const maxInput = await ctx.ui.input(
+        "Max output tokens (e.g., 4096, or empty to clear):",
+        model.maxTokens?.toString() || ""
+      );
+      if (maxInput === "") {
+        delete model.maxTokens;
+        ctx.ui.notify("✓ Max tokens cleared", "success");
+      } else if (maxInput) {
+        const maxTokens = parseInt(maxInput, 10);
+        if (isNaN(maxTokens)) {
+          ctx.ui.notify("Invalid number, not changed", "warning");
+        } else {
+          model.maxTokens = maxTokens;
+          ctx.ui.notify(`✓ Max output tokens: ${maxTokens}`, "success");
+        }
+      }
+    } else if (action === "Compatibility settings") {
+      const supportsDev = await ctx.ui.confirm(
+        "Does it support developer role?",
+        "Developer role"
+      );
+      const supportsReasoning = await ctx.ui.confirm(
+        "Does it support reasoning_effort parameter?",
+        "Reasoning effort"
+      );
+
+      if (!model.compat) {
+        model.compat = {};
+      }
+      model.compat.supportsDeveloperRole = supportsDev;
+      model.compat.supportsReasoningEffort = supportsReasoning;
+      ctx.ui.notify("✓ Compatibility settings updated", "success");
+    }
+  }
+
+  // Save changes
+  if (saveConfig(config)) {
+    ctx.ui.notify(`✓ Model "${modelId}" updated successfully`, "success");
+  } else {
+    ctx.ui.notify("Failed to save configuration", "error");
+  }
+}
+
 // __CONTINUE_HERE_4__
 
 // ============================================================================
@@ -960,12 +1222,15 @@ export default function (pi: ExtensionAPI) {
           return handleModelList(ctx, rest[0]);
         case "remove":
           return handleModelRemove(ctx);
+        case "edit":
+          return handleModelEdit(ctx);
         default:
           ctx.ui.notify(
             "Model Management Commands:\n\n" +
             "/add-model add - Add model (interactive)\n" +
             "/add-model list [provider] - List models\n" +
-            "/add-model remove - Remove model (interactive)",
+            "/add-model remove - Remove model (interactive)\n" +
+            "/add-model edit - Edit model configuration (interactive)",
             "info"
           );
       }
