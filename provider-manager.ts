@@ -3,6 +3,10 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
+// ============================================================================
+// Types
+// ============================================================================
+
 interface ModelConfig {
   id: string;
   name?: string;
@@ -31,39 +35,45 @@ interface ModelsConfig {
   providers: Record<string, Provider>;
 }
 
+// ============================================================================
+// Constants
+// ============================================================================
+
 const CONFIG_PATH = path.join(os.homedir(), ".pi", "agent", "models.json");
 const BACKUP_DIR = path.join(os.homedir(), ".pi", "agent", "backups");
 const MAX_BACKUPS = 10;
+
+const KEY_METHOD_ENV = "Environment Variable (Recommended)";
+const KEY_METHOD_DIRECT = "Direct Input";
+
+// ============================================================================
+// Configuration Management
+// ============================================================================
 
 function backupConfig(): void {
   if (!fs.existsSync(CONFIG_PATH)) {
     return;
   }
 
-  // Create backup directory if it doesn't exist
   if (!fs.existsSync(BACKUP_DIR)) {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
   }
 
-  // Generate timestamped backup filename
   const timestamp = new Date()
     .toISOString()
     .replace(/[:.]/g, "-")
     .replace("T", "-")
-    .slice(0, 19); // YYYY-MM-DD-HH-MM-SS
+    .slice(0, 19);
   const backupPath = path.join(BACKUP_DIR, `models.json.backup.${timestamp}`);
 
-  // Copy current config to timestamped backup
   fs.copyFileSync(CONFIG_PATH, backupPath);
 
-  // Clean up old backups (keep only MAX_BACKUPS most recent)
   const backups = fs
     .readdirSync(BACKUP_DIR)
     .filter((f) => f.startsWith("models.json.backup."))
     .sort()
-    .reverse(); // Most recent first
+    .reverse();
 
-  // Remove old backups beyond MAX_BACKUPS
   for (let i = MAX_BACKUPS; i < backups.length; i++) {
     fs.unlinkSync(path.join(BACKUP_DIR, backups[i]));
   }
@@ -78,14 +88,12 @@ function loadConfig(): ModelsConfig | null {
     const config = JSON.parse(content);
     return config;
   } catch (error) {
-    // Don't return empty config on error - return null to indicate failure
     return null;
   }
 }
 
 function saveConfig(config: ModelsConfig): boolean {
   try {
-    // Backup before writing
     backupConfig();
 
     const dir = path.dirname(CONFIG_PATH);
@@ -99,24 +107,24 @@ function saveConfig(config: ModelsConfig): boolean {
   }
 }
 
+// ============================================================================
+// Provider Testing
+// ============================================================================
+
 async function testProviderConnection(
   baseUrl: string,
   apiKey: string,
   api: string
 ): Promise<{ success: boolean; message: string; details?: string }> {
   try {
-    // Test basic connectivity
     const url = new URL(baseUrl);
     let testResults: string[] = [];
 
-    // For OpenAI-compatible APIs, test multiple endpoints
     if (api === "openai-completions") {
-      // Test 1: /models endpoint
+      // Test /models endpoint
       try {
         const modelsResponse = await fetch(`${baseUrl}/models`, {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-          },
+          headers: { Authorization: `Bearer ${apiKey}` },
           signal: AbortSignal.timeout(5000),
         });
 
@@ -148,7 +156,7 @@ async function testProviderConnection(
         };
       }
 
-      // Test 2: Chat completion endpoint
+      // Test /chat/completions endpoint
       try {
         const chatResponse = await fetch(`${baseUrl}/chat/completions`, {
           method: "POST",
@@ -164,7 +172,6 @@ async function testProviderConnection(
           signal: AbortSignal.timeout(5000),
         });
 
-        // We expect either 200 (success) or 404 (model not found), both indicate the endpoint works
         if (chatResponse.ok) {
           testResults.push("✓ /chat/completions: OK");
         } else if (chatResponse.status === 404) {
@@ -186,819 +193,781 @@ async function testProviderConnection(
         }
       }
 
-      // Overall assessment
       const hasModels = testResults.some((r) => r.includes("✓ /models"));
       const hasChat = testResults.some((r) => r.includes("✓ /chat/completions"));
 
       if (hasModels && hasChat) {
-        return {
-          success: true,
-          message: "All tests passed",
-          details: testResults.join("\n"),
-        };
+        return { success: true, message: "All tests passed", details: testResults.join("\n") };
       } else if (hasModels || hasChat) {
-        return {
-          success: true,
-          message: "Partially working",
-          details: testResults.join("\n"),
-        };
+        return { success: true, message: "Partially working", details: testResults.join("\n") };
       } else {
-        return {
-          success: false,
-          message: "Connection issues",
-          details: testResults.join("\n"),
-        };
+        return { success: false, message: "Connection issues", details: testResults.join("\n") };
       }
     }
 
-    // For other APIs, just validate URL
     return { success: true, message: `URL valid: ${url.origin}` };
   } catch (error: any) {
     return { success: false, message: error.message || "Connection failed" };
   }
 }
 
+// __CONTINUE_HERE__
+
+// ============================================================================
+// Provider Command Handlers
+// ============================================================================
+
+async function handleProviderAdd(ctx: any): Promise<void> {
+  const name = await ctx.ui.input("Provider name:", "");
+  if (!name) {
+    ctx.ui.notify("Provider name is required", "error");
+    return;
+  }
+
+  const baseUrl = await ctx.ui.input("Base URL:", "http://localhost:11434/v1");
+  if (!baseUrl) {
+    ctx.ui.notify("Base URL is required", "error");
+    return;
+  }
+
+  const api = await ctx.ui.select("API type:", [
+    "openai-completions",
+    "anthropic-messages",
+    "google-generative-ai",
+  ]);
+
+  if (!api) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const keyMethod = await ctx.ui.select("API Key method:", [
+    KEY_METHOD_ENV,
+    KEY_METHOD_DIRECT,
+  ]);
+
+  if (!keyMethod) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  let apiKey: string;
+  if (keyMethod === KEY_METHOD_ENV) {
+    const envVar = await ctx.ui.input(
+      "Environment variable name:",
+      `${name.toUpperCase()}_API_KEY`
+    );
+    if (!envVar) {
+      ctx.ui.notify("Cancelled", "info");
+      return;
+    }
+    apiKey = `$${envVar}`;
+    ctx.ui.notify(`Remember to set: export ${envVar}=your-api-key`, "info");
+  } else {
+    apiKey = await ctx.ui.input("API Key:", "sk-any");
+    if (!apiKey) {
+      ctx.ui.notify("API Key is required", "error");
+      return;
+    }
+    ctx.ui.notify(
+      "⚠️  API key will be stored in plaintext. Consider using environment variables.",
+      "warning"
+    );
+  }
+
+  const config = loadConfig();
+  if (config === null) {
+    ctx.ui.notify(
+      "Failed to load models.json. File may be corrupted. Use /provider doctor to diagnose.",
+      "error"
+    );
+    return;
+  }
+
+  if (config.providers[name]) {
+    const ok = await ctx.ui.confirm(
+      `Provider "${name}" already exists. Overwrite?`,
+      "Overwrite?"
+    );
+    if (!ok) return;
+  }
+
+  config.providers[name] = {
+    baseUrl,
+    api: api as any,
+    apiKey,
+    models: [],
+  };
+
+  if (saveConfig(config)) {
+    ctx.ui.notify(`✓ Provider "${name}" added successfully`, "success");
+  } else {
+    ctx.ui.notify("Failed to save configuration", "error");
+  }
+}
+
+async function handleProviderList(ctx: any): Promise<void> {
+  const config = loadConfig();
+  if (config === null) {
+    ctx.ui.notify("Failed to load models.json", "error");
+    return;
+  }
+
+  const providers = Object.keys(config.providers);
+
+  if (providers.length === 0) {
+    ctx.ui.notify("No providers configured", "info");
+    return;
+  }
+
+  let output = "Configured Providers:\n\n";
+  for (const name of providers) {
+    const p = config.providers[name];
+    output += `• ${name}\n`;
+    output += `  URL: ${p.baseUrl}\n`;
+    output += `  API: ${p.api}\n`;
+    output += `  Key: ${p.apiKey.startsWith("$") ? p.apiKey + " (env)" : "***"}\n`;
+    output += `  Models: ${p.models.length}\n\n`;
+  }
+
+  ctx.ui.notify(output, "info");
+}
+
+async function handleProviderRemove(ctx: any): Promise<void> {
+  const config = loadConfig();
+  if (config === null) {
+    ctx.ui.notify("Failed to load models.json", "error");
+    return;
+  }
+
+  const providers = Object.keys(config.providers);
+
+  if (providers.length === 0) {
+    ctx.ui.notify("No providers configured", "info");
+    return;
+  }
+
+  const name = await ctx.ui.select("Select provider to remove:", providers);
+
+  if (!name) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const ok = await ctx.ui.confirm(
+    `Delete provider "${name}" and all its models?`,
+    "Confirm deletion"
+  );
+
+  if (!ok) return;
+
+  delete config.providers[name];
+
+  if (saveConfig(config)) {
+    ctx.ui.notify(`✓ Provider "${name}" removed`, "success");
+  } else {
+    ctx.ui.notify("Failed to save configuration", "error");
+  }
+}
+
+async function handleProviderTest(ctx: any): Promise<void> {
+  const config = loadConfig();
+  if (config === null) {
+    ctx.ui.notify("Failed to load models.json", "error");
+    return;
+  }
+
+  const providers = Object.keys(config.providers);
+
+  if (providers.length === 0) {
+    ctx.ui.notify("No providers configured", "info");
+    return;
+  }
+
+  const name = await ctx.ui.select("Select provider to test:", providers);
+
+  if (!name) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const provider = config.providers[name];
+  ctx.ui.notify(`Testing ${name}...\nURL: ${provider.baseUrl}`, "info");
+
+  let apiKey = provider.apiKey;
+  if (apiKey.startsWith("$")) {
+    const envVar = apiKey.slice(1);
+    apiKey = process.env[envVar] || "";
+    if (!apiKey) {
+      ctx.ui.notify(`Environment variable ${envVar} is not set`, "error");
+      return;
+    }
+  }
+
+  const result = await testProviderConnection(provider.baseUrl, apiKey, provider.api);
+
+  if (result.success) {
+    let message = `✓ ${result.message}`;
+    if (result.details) {
+      message += `\n\n${result.details}`;
+    }
+    ctx.ui.notify(message, "success");
+  } else {
+    let message = `✗ ${result.message}`;
+    if (result.details) {
+      message += `\n\n${result.details}`;
+    }
+    ctx.ui.notify(message, "error");
+  }
+}
+
+async function handleProviderDoctor(ctx: any): Promise<void> {
+  ctx.ui.notify("Running diagnostics...", "info");
+
+  const config = loadConfig();
+
+  if (config === null) {
+    let backupList = "";
+    if (fs.existsSync(BACKUP_DIR)) {
+      const backups = fs
+        .readdirSync(BACKUP_DIR)
+        .filter((f) => f.startsWith("models.json.backup."))
+        .sort()
+        .reverse()
+        .slice(0, 5);
+
+      if (backups.length > 0) {
+        backupList = "\n\nAvailable backups:\n" + backups.map((b) => `  ${b}`).join("\n");
+        backupList += `\n\nTo restore: cp ~/.pi/agent/backups/<backup-file> ~/.pi/agent/models.json`;
+      }
+    }
+
+    ctx.ui.notify("✗ models.json is corrupted or invalid JSON" + backupList, "error");
+    return;
+  }
+
+  let report = "Configuration Health Check:\n\n";
+  report += `✓ models.json is valid JSON\n`;
+  report += `✓ Location: ${CONFIG_PATH}\n`;
+
+  if (fs.existsSync(BACKUP_DIR)) {
+    const backups = fs
+      .readdirSync(BACKUP_DIR)
+      .filter((f) => f.startsWith("models.json.backup."))
+      .sort()
+      .reverse();
+
+    if (backups.length > 0) {
+      report += `✓ Backups: ${backups.length} (keeping ${MAX_BACKUPS} most recent)\n`;
+      report += `  Latest: ${backups[0]}\n`;
+      report += `  Location: ${BACKUP_DIR}\n`;
+    }
+  }
+
+  const providerCount = Object.keys(config.providers).length;
+  report += `\nProviders: ${providerCount}\n`;
+
+  for (const [name, provider] of Object.entries(config.providers)) {
+    report += `\n• ${name}\n`;
+
+    if (provider.apiKey.startsWith("$")) {
+      const envVar = provider.apiKey.slice(1);
+      if (process.env[envVar]) {
+        report += `  ✓ API key (${envVar}) is set\n`;
+      } else {
+        report += `  ✗ API key (${envVar}) is NOT set\n`;
+      }
+    } else {
+      report += `  ⚠️  API key is stored in plaintext\n`;
+    }
+
+    report += `  Models: ${provider.models.length}\n`;
+  }
+
+  ctx.ui.notify(report, "info");
+}
+
+// __CONTINUE_HERE_2__
+
+async function handleProviderImportModels(ctx: any): Promise<void> {
+  const config = loadConfig();
+  if (config === null) {
+    ctx.ui.notify("Failed to load models.json", "error");
+    return;
+  }
+
+  const providers = Object.keys(config.providers);
+
+  if (providers.length === 0) {
+    ctx.ui.notify("No providers configured. Add one first with /provider add", "error");
+    return;
+  }
+
+  const providerName = await ctx.ui.select(
+    "Select provider to import models from:",
+    providers
+  );
+
+  if (!providerName) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const provider = config.providers[providerName];
+
+  if (provider.api !== "openai-completions") {
+    ctx.ui.notify("Model import is only supported for OpenAI-compatible APIs", "error");
+    return;
+  }
+
+  ctx.ui.notify(`Fetching models from ${providerName}...`, "info");
+
+  let apiKey = provider.apiKey;
+  if (apiKey.startsWith("$")) {
+    const envVar = apiKey.slice(1);
+    apiKey = process.env[envVar] || "";
+    if (!apiKey) {
+      ctx.ui.notify(`Environment variable ${envVar} is not set`, "error");
+      return;
+    }
+  }
+
+  try {
+    const response = await fetch(`${provider.baseUrl}/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      ctx.ui.notify(`Failed to fetch models: HTTP ${response.status}`, "error");
+      return;
+    }
+
+    const data = await response.json();
+    const models = data.data || [];
+
+    if (models.length === 0) {
+      ctx.ui.notify("No models found", "info");
+      return;
+    }
+
+    const existingIds = new Set(provider.models.map((m) => m.id));
+    const newModels = models
+      .filter((m: any) => !existingIds.has(m.id))
+      .map((m: any) => m.id)
+      .sort();
+
+    if (newModels.length === 0) {
+      ctx.ui.notify("All available models are already imported", "info");
+      return;
+    }
+
+    ctx.ui.notify(
+      `Found ${newModels.length} new model(s):\n\n${newModels.slice(0, 10).map((m: string) => `  • ${m}`).join("\n")}` +
+      (newModels.length > 10 ? `\n  ... and ${newModels.length - 10} more` : ""),
+      "info"
+    );
+
+    const importAll = await ctx.ui.confirm(
+      `Import all ${newModels.length} model(s)?`,
+      "Import all"
+    );
+
+    let selectedModels: string[] = [];
+
+    if (importAll) {
+      selectedModels = newModels;
+    } else {
+      const toAsk = newModels.slice(0, 20);
+      for (const modelId of toAsk) {
+        const shouldImport = await ctx.ui.confirm(`Import "${modelId}"?`, "Import model");
+        if (shouldImport) {
+          selectedModels.push(modelId);
+        }
+      }
+    }
+
+    if (selectedModels.length === 0) {
+      ctx.ui.notify("No models selected", "info");
+      return;
+    }
+
+    const configureBatch = await ctx.ui.confirm(
+      "Apply default configuration to all imported models?",
+      "Batch configuration"
+    );
+
+    let batchConfig: Partial<ModelConfig> = {};
+
+    if (configureBatch) {
+      const reasoning = await ctx.ui.confirm(
+        "Do these models support reasoning?",
+        "Reasoning support"
+      );
+
+      if (reasoning) {
+        batchConfig.reasoning = true;
+      }
+
+      const contextInput = await ctx.ui.input(
+        "Context window (optional, e.g., 128000):",
+        ""
+      );
+      if (contextInput) {
+        const contextWindow = parseInt(contextInput, 10);
+        if (!isNaN(contextWindow)) {
+          batchConfig.contextWindow = contextWindow;
+        }
+      }
+
+      const maxInput = await ctx.ui.input(
+        "Max output tokens (optional, e.g., 4096):",
+        ""
+      );
+      if (maxInput) {
+        const maxTokens = parseInt(maxInput, 10);
+        if (!isNaN(maxTokens)) {
+          batchConfig.maxTokens = maxTokens;
+        }
+      }
+    }
+
+    for (const modelId of selectedModels) {
+      provider.models.push({
+        id: modelId,
+        name: modelId,
+        ...batchConfig,
+      });
+    }
+
+    if (saveConfig(config)) {
+      ctx.ui.notify(
+        `✓ Successfully imported ${selectedModels.length} model(s) to provider "${providerName}"`,
+        "success"
+      );
+    } else {
+      ctx.ui.notify("Failed to save configuration", "error");
+    }
+  } catch (error: any) {
+    if (error.name === "AbortError") {
+      ctx.ui.notify("Request timeout", "error");
+    } else {
+      ctx.ui.notify(`Error: ${error.message}`, "error");
+    }
+  }
+}
+
+// __CONTINUE_HERE_3__
+
+// ============================================================================
+// Model Command Handlers
+// ============================================================================
+
+async function handleModelAdd(ctx: any): Promise<void> {
+  const config = loadConfig();
+  if (config === null) {
+    ctx.ui.notify("Failed to load models.json", "error");
+    return;
+  }
+
+  const providers = Object.keys(config.providers);
+
+  if (providers.length === 0) {
+    ctx.ui.notify("No providers configured. Add one first with /provider add", "error");
+    return;
+  }
+
+  const providerName = await ctx.ui.select("Select provider:", providers);
+
+  if (!providerName) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const modelId = await ctx.ui.input("Model ID:", "");
+  if (!modelId) {
+    ctx.ui.notify("Model ID is required", "error");
+    return;
+  }
+
+  const modelName = await ctx.ui.input("Model Name (optional):", modelId);
+
+  const addAdvanced = await ctx.ui.confirm(
+    "Configure advanced options (reasoning, compat, context window)?",
+    "Advanced options"
+  );
+
+  const modelConfig: ModelConfig = {
+    id: modelId,
+    name: modelName || modelId,
+  };
+
+  if (addAdvanced) {
+    const reasoning = await ctx.ui.confirm(
+      "Does this model support reasoning?",
+      "Reasoning support"
+    );
+    if (reasoning) {
+      modelConfig.reasoning = true;
+    }
+
+    const needCompat = await ctx.ui.confirm(
+      "Does this model have compatibility issues (e.g., no developer role)?",
+      "Compatibility settings"
+    );
+
+    if (needCompat) {
+      const supportsDev = await ctx.ui.confirm(
+        "Does it support developer role?",
+        "Developer role"
+      );
+      const supportsReasoning = await ctx.ui.confirm(
+        "Does it support reasoning_effort parameter?",
+        "Reasoning effort"
+      );
+
+      modelConfig.compat = {
+        supportsDeveloperRole: supportsDev,
+        supportsReasoningEffort: supportsReasoning,
+      };
+    }
+
+    const contextInput = await ctx.ui.input(
+      "Context window (optional, e.g., 128000):",
+      ""
+    );
+    if (contextInput) {
+      const contextWindow = parseInt(contextInput, 10);
+      if (!isNaN(contextWindow)) {
+        modelConfig.contextWindow = contextWindow;
+      }
+    }
+
+    const maxInput = await ctx.ui.input(
+      "Max output tokens (optional, e.g., 4096):",
+      ""
+    );
+    if (maxInput) {
+      const maxTokens = parseInt(maxInput, 10);
+      if (!isNaN(maxTokens)) {
+        modelConfig.maxTokens = maxTokens;
+      }
+    }
+  }
+
+  const provider = config.providers[providerName];
+  const existingIndex = provider.models.findIndex((m) => m.id === modelId);
+
+  if (existingIndex >= 0) {
+    const ok = await ctx.ui.confirm(
+      `Model "${modelId}" already exists. Overwrite?`,
+      "Overwrite?"
+    );
+    if (!ok) return;
+    provider.models[existingIndex] = modelConfig;
+  } else {
+    provider.models.push(modelConfig);
+  }
+
+  if (saveConfig(config)) {
+    ctx.ui.notify(`✓ Model "${modelId}" added to provider "${providerName}"`, "success");
+  } else {
+    ctx.ui.notify("Failed to save configuration", "error");
+  }
+}
+
+async function handleModelList(ctx: any, providerName?: string): Promise<void> {
+  const config = loadConfig();
+
+  if (config === null) {
+    ctx.ui.notify("Failed to load models.json", "error");
+    return;
+  }
+
+  if (providerName) {
+    const provider = config.providers[providerName];
+    if (!provider) {
+      ctx.ui.notify(`Provider "${providerName}" not found`, "error");
+      return;
+    }
+
+    if (provider.models.length === 0) {
+      ctx.ui.notify(`No models configured for provider "${providerName}"`, "info");
+      return;
+    }
+
+    let output = `Models for "${providerName}":\n\n`;
+    for (const model of provider.models) {
+      output += `• ${model.id}`;
+      if (model.name && model.name !== model.id) {
+        output += ` (${model.name})`;
+      }
+      if (model.reasoning) {
+        output += ` [reasoning]`;
+      }
+      if (model.compat) {
+        output += ` [compat]`;
+      }
+      output += "\n";
+    }
+    ctx.ui.notify(output, "info");
+  } else {
+    let output = "All Models:\n\n";
+    let hasModels = false;
+
+    for (const [name, provider] of Object.entries(config.providers)) {
+      if (provider.models.length > 0) {
+        hasModels = true;
+        output += `${name}:\n`;
+        for (const model of provider.models) {
+          output += `  • ${model.id}`;
+          if (model.name && model.name !== model.id) {
+            output += ` (${model.name})`;
+          }
+          if (model.reasoning) {
+            output += ` [reasoning]`;
+          }
+          output += "\n";
+        }
+        output += "\n";
+      }
+    }
+
+    if (!hasModels) {
+      ctx.ui.notify("No models configured", "info");
+      return;
+    }
+
+    ctx.ui.notify(output, "info");
+  }
+}
+
+async function handleModelRemove(ctx: any): Promise<void> {
+  const config = loadConfig();
+  if (config === null) {
+    ctx.ui.notify("Failed to load models.json", "error");
+    return;
+  }
+
+  const providers = Object.keys(config.providers);
+
+  if (providers.length === 0) {
+    ctx.ui.notify("No providers configured", "info");
+    return;
+  }
+
+  const providerName = await ctx.ui.select("Select provider:", providers);
+
+  if (!providerName) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const provider = config.providers[providerName];
+
+  if (provider.models.length === 0) {
+    ctx.ui.notify(`No models in provider "${providerName}"`, "info");
+    return;
+  }
+
+  const modelId = await ctx.ui.select(
+    "Select model to remove:",
+    provider.models.map((m) => m.id)
+  );
+
+  if (!modelId) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const ok = await ctx.ui.confirm(
+    `Delete model "${modelId}" from provider "${providerName}"?`,
+    "Confirm deletion"
+  );
+
+  if (!ok) return;
+
+  const index = provider.models.findIndex((m) => m.id === modelId);
+
+  if (index < 0) {
+    ctx.ui.notify(`Model "${modelId}" not found in provider "${providerName}"`, "error");
+    return;
+  }
+
+  provider.models.splice(index, 1);
+
+  if (saveConfig(config)) {
+    ctx.ui.notify(`✓ Model "${modelId}" removed from provider "${providerName}"`, "success");
+  } else {
+    ctx.ui.notify("Failed to save configuration", "error");
+  }
+}
+
+// __CONTINUE_HERE_4__
+
+// ============================================================================
+// Main Extension Entry Point
+// ============================================================================
+
 export default function (pi: ExtensionAPI) {
-  // /provider add
+  // Register /provider command
   pi.registerCommand("provider", {
     description: "Manage custom providers in models.json",
     handler: async (args, ctx) => {
       const parts = args?.trim().split(/\s+/) || [];
-      const [action, ...rest] = parts;
+      const [action] = parts;
 
-      if (action === "add") {
-        // Interactive mode: prompt for each field
-        const name = await ctx.ui.input("Provider name:", "");
-        if (!name) {
-          ctx.ui.notify("Provider name is required", "error");
-          return;
-        }
-
-        const baseUrl = await ctx.ui.input("Base URL:", "http://localhost:11434/v1");
-        if (!baseUrl) {
-          ctx.ui.notify("Base URL is required", "error");
-          return;
-        }
-
-        const api = await ctx.ui.select(
-          "API type:",
-          [
-            "openai-completions",
-            "anthropic-messages",
-            "google-generative-ai",
-          ]
-        );
-
-        if (!api) {
-          ctx.ui.notify("Cancelled", "info");
-          return;
-        }
-
-        // Suggest environment variable for API key
-        const keyMethod = await ctx.ui.select(
-          "API Key method:",
-          [
-            "Environment Variable (Recommended)",
-            "Direct Input",
-          ]
-        );
-
-        if (!keyMethod) {
-          ctx.ui.notify("Cancelled", "info");
-          return;
-        }
-
-        let apiKey: string;
-        if (keyMethod === "Environment Variable (Recommended)") {
-          const envVar = await ctx.ui.input(
-            "Environment variable name:",
-            `${name.toUpperCase()}_API_KEY`
-          );
-          if (!envVar) {
-            ctx.ui.notify("Cancelled", "info");
-            return;
-          }
-          apiKey = `$${envVar}`;
+      switch (action) {
+        case "add":
+          return handleProviderAdd(ctx);
+        case "list":
+          return handleProviderList(ctx);
+        case "remove":
+          return handleProviderRemove(ctx);
+        case "test":
+          return handleProviderTest(ctx);
+        case "doctor":
+          return handleProviderDoctor(ctx);
+        case "import-models":
+          return handleProviderImportModels(ctx);
+        default:
           ctx.ui.notify(
-            `Remember to set: export ${envVar}=your-api-key`,
+            "Provider Management Commands:\n\n" +
+            "/provider add - Add provider (interactive)\n" +
+            "/provider list - List all providers\n" +
+            "/provider remove - Remove provider (interactive)\n" +
+            "/provider test - Test provider connection (interactive)\n" +
+            "/provider doctor - Run diagnostics\n" +
+            "/provider import-models - Import models from provider (interactive)\n\n" +
+            "APIs: openai-completions, anthropic-messages, google-generative-ai",
             "info"
           );
-        } else {
-          apiKey = await ctx.ui.input("API Key:", "sk-any");
-          if (!apiKey) {
-            ctx.ui.notify("API Key is required", "error");
-            return;
-          }
-          ctx.ui.notify(
-            "⚠️  API key will be stored in plaintext. Consider using environment variables.",
-            "warning"
-          );
-        }
-
-        const config = loadConfig();
-        if (config === null) {
-          ctx.ui.notify(
-            "Failed to load models.json. File may be corrupted. Use /provider doctor to diagnose.",
-            "error"
-          );
-          return;
-        }
-
-        if (config.providers[name]) {
-          const ok = await ctx.ui.confirm(
-            `Provider "${name}" already exists. Overwrite?`,
-            "Overwrite?"
-          );
-          if (!ok) return;
-        }
-
-        config.providers[name] = {
-          baseUrl,
-          api: api as any,
-          apiKey,
-          models: [],
-        };
-
-        if (saveConfig(config)) {
-          ctx.ui.notify(`✓ Provider "${name}" added successfully`, "success");
-        } else {
-          ctx.ui.notify("Failed to save configuration", "error");
-        }
-
-      } else if (action === "list") {
-        const config = loadConfig();
-        if (config === null) {
-          ctx.ui.notify("Failed to load models.json", "error");
-          return;
-        }
-
-        const providers = Object.keys(config.providers);
-
-        if (providers.length === 0) {
-          ctx.ui.notify("No providers configured", "info");
-          return;
-        }
-
-        let output = "Configured Providers:\n\n";
-        for (const name of providers) {
-          const p = config.providers[name];
-          output += `• ${name}\n`;
-          output += `  URL: ${p.baseUrl}\n`;
-          output += `  API: ${p.api}\n`;
-          output += `  Key: ${p.apiKey.startsWith("$") ? p.apiKey + " (env)" : "***"}\n`;
-          output += `  Models: ${p.models.length}\n\n`;
-        }
-
-        ctx.ui.notify(output, "info");
-
-      } else if (action === "remove") {
-        const config = loadConfig();
-        if (config === null) {
-          ctx.ui.notify("Failed to load models.json", "error");
-          return;
-        }
-
-        const providers = Object.keys(config.providers);
-
-        if (providers.length === 0) {
-          ctx.ui.notify("No providers configured", "info");
-          return;
-        }
-
-        // Interactive mode: select provider to remove
-        const name = await ctx.ui.select(
-          "Select provider to remove:",
-          providers.map((p) => p)
-        );
-
-        if (!name) {
-          ctx.ui.notify("Cancelled", "info");
-          return;
-        }
-
-        const ok = await ctx.ui.confirm(
-          `Delete provider "${name}" and all its models?`,
-          "Confirm deletion"
-        );
-
-        if (!ok) return;
-
-        delete config.providers[name];
-
-        if (saveConfig(config)) {
-          ctx.ui.notify(`✓ Provider "${name}" removed`, "success");
-        } else {
-          ctx.ui.notify("Failed to save configuration", "error");
-        }
-
-      } else if (action === "test") {
-        const config = loadConfig();
-        if (config === null) {
-          ctx.ui.notify("Failed to load models.json", "error");
-          return;
-        }
-
-        const providers = Object.keys(config.providers);
-
-        if (providers.length === 0) {
-          ctx.ui.notify("No providers configured", "info");
-          return;
-        }
-
-        const name = await ctx.ui.select(
-          "Select provider to test:",
-          providers.map((p) => p)
-        );
-
-        if (!name) {
-          ctx.ui.notify("Cancelled", "info");
-          return;
-        }
-
-        const provider = config.providers[name];
-        ctx.ui.notify(`Testing ${name}...\nURL: ${provider.baseUrl}`, "info");
-
-        // Resolve API key from environment if needed
-        let apiKey = provider.apiKey;
-        if (apiKey.startsWith("$")) {
-          const envVar = apiKey.slice(1);
-          apiKey = process.env[envVar] || "";
-          if (!apiKey) {
-            ctx.ui.notify(
-              `Environment variable ${envVar} is not set`,
-              "error"
-            );
-            return;
-          }
-        }
-
-        const result = await testProviderConnection(
-          provider.baseUrl,
-          apiKey,
-          provider.api
-        );
-
-        if (result.success) {
-          let message = `✓ ${result.message}`;
-          if (result.details) {
-            message += `\n\n${result.details}`;
-          }
-          ctx.ui.notify(message, "success");
-        } else {
-          let message = `✗ ${result.message}`;
-          if (result.details) {
-            message += `\n\n${result.details}`;
-          }
-          ctx.ui.notify(message, "error");
-        }
-
-      } else if (action === "doctor") {
-        ctx.ui.notify("Running diagnostics...", "info");
-
-        const config = loadConfig();
-
-        if (config === null) {
-          // List available backups
-          let backupList = "";
-          if (fs.existsSync(BACKUP_DIR)) {
-            const backups = fs
-              .readdirSync(BACKUP_DIR)
-              .filter((f) => f.startsWith("models.json.backup."))
-              .sort()
-              .reverse()
-              .slice(0, 5);
-
-            if (backups.length > 0) {
-              backupList = "\n\nAvailable backups:\n" + backups.map((b) => `  ${b}`).join("\n");
-              backupList += `\n\nTo restore: cp ~/.pi/agent/backups/<backup-file> ~/.pi/agent/models.json`;
-            }
-          }
-
-          ctx.ui.notify(
-            "✗ models.json is corrupted or invalid JSON" + backupList,
-            "error"
-          );
-          return;
-        }
-
-        let report = "Configuration Health Check:\n\n";
-        report += `✓ models.json is valid JSON\n`;
-        report += `✓ Location: ${CONFIG_PATH}\n`;
-
-        // Show backup info
-        if (fs.existsSync(BACKUP_DIR)) {
-          const backups = fs
-            .readdirSync(BACKUP_DIR)
-            .filter((f) => f.startsWith("models.json.backup."))
-            .sort()
-            .reverse();
-
-          if (backups.length > 0) {
-            report += `✓ Backups: ${backups.length} (keeping ${MAX_BACKUPS} most recent)\n`;
-            report += `  Latest: ${backups[0]}\n`;
-            report += `  Location: ${BACKUP_DIR}\n`;
-          }
-        }
-
-        const providerCount = Object.keys(config.providers).length;
-        report += `\nProviders: ${providerCount}\n`;
-
-        for (const [name, provider] of Object.entries(config.providers)) {
-          report += `\n• ${name}\n`;
-
-          // Check API key
-          if (provider.apiKey.startsWith("$")) {
-            const envVar = provider.apiKey.slice(1);
-            if (process.env[envVar]) {
-              report += `  ✓ API key (${envVar}) is set\n`;
-            } else {
-              report += `  ✗ API key (${envVar}) is NOT set\n`;
-            }
-          } else {
-            report += `  ⚠️  API key is stored in plaintext\n`;
-          }
-
-          report += `  Models: ${provider.models.length}\n`;
-        }
-
-        ctx.ui.notify(report, "info");
-
-      } else if (action === "import-models") {
-        const config = loadConfig();
-        if (config === null) {
-          ctx.ui.notify("Failed to load models.json", "error");
-          return;
-        }
-
-        const providers = Object.keys(config.providers);
-
-        if (providers.length === 0) {
-          ctx.ui.notify("No providers configured. Add one first with /provider add", "error");
-          return;
-        }
-
-        // Select provider
-        const providerName = await ctx.ui.select(
-          "Select provider to import models from:",
-          providers.map((p) => p)
-        );
-
-        if (!providerName) {
-          ctx.ui.notify("Cancelled", "info");
-          return;
-        }
-
-        const provider = config.providers[providerName];
-
-        // Only works for OpenAI-compatible APIs
-        if (provider.api !== "openai-completions") {
-          ctx.ui.notify(
-            "Model import is only supported for OpenAI-compatible APIs",
-            "error"
-          );
-          return;
-        }
-
-        ctx.ui.notify(`Fetching models from ${providerName}...`, "info");
-
-        // Resolve API key
-        let apiKey = provider.apiKey;
-        if (apiKey.startsWith("$")) {
-          const envVar = apiKey.slice(1);
-          apiKey = process.env[envVar] || "";
-          if (!apiKey) {
-            ctx.ui.notify(
-              `Environment variable ${envVar} is not set`,
-              "error"
-            );
-            return;
-          }
-        }
-
-        // Fetch models
-        try {
-          const response = await fetch(`${provider.baseUrl}/models`, {
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-            },
-            signal: AbortSignal.timeout(10000),
-          });
-
-          if (!response.ok) {
-            ctx.ui.notify(
-              `Failed to fetch models: HTTP ${response.status}`,
-              "error"
-            );
-            return;
-          }
-
-          const data = await response.json();
-          const models = data.data || [];
-
-          if (models.length === 0) {
-            ctx.ui.notify("No models found", "info");
-            return;
-          }
-
-          // Get existing model IDs
-          const existingIds = new Set(provider.models.map((m) => m.id));
-
-          // Filter out already imported models
-          const newModels = models
-            .filter((m: any) => !existingIds.has(m.id))
-            .map((m: any) => m.id)
-            .sort();
-
-          if (newModels.length === 0) {
-            ctx.ui.notify("All available models are already imported", "info");
-            return;
-          }
-
-          ctx.ui.notify(
-            `Found ${newModels.length} new model(s):\n\n${newModels.slice(0, 10).map((m: string) => `  • ${m}`).join("\n")}` +
-            (newModels.length > 10 ? `\n  ... and ${newModels.length - 10} more` : ""),
-            "info"
-          );
-
-          // Import all or select individually
-          const importAll = await ctx.ui.confirm(
-            `Import all ${newModels.length} model(s)?`,
-            "Import all"
-          );
-
-          let selectedModels: string[] = [];
-
-          if (importAll) {
-            selectedModels = newModels;
-          } else {
-            // Import one by one (up to 20 to avoid too many prompts)
-            const toAsk = newModels.slice(0, 20);
-            for (const modelId of toAsk) {
-              const shouldImport = await ctx.ui.confirm(
-                `Import "${modelId}"?`,
-                "Import model"
-              );
-              if (shouldImport) {
-                selectedModels.push(modelId);
-              }
-            }
-          }
-
-          if (selectedModels.length === 0) {
-            ctx.ui.notify("No models selected", "info");
-            return;
-          }
-
-          // Ask for batch configuration
-          const configureBatch = await ctx.ui.confirm(
-            "Apply default configuration to all imported models?",
-            "Batch configuration"
-          );
-
-          let batchConfig: Partial<ModelConfig> = {};
-
-          if (configureBatch) {
-            const reasoning = await ctx.ui.confirm(
-              "Do these models support reasoning?",
-              "Reasoning support"
-            );
-
-            if (reasoning) {
-              batchConfig.reasoning = true;
-            }
-
-            const contextInput = await ctx.ui.input(
-              "Context window (optional, e.g., 128000):",
-              ""
-            );
-            if (contextInput) {
-              const contextWindow = parseInt(contextInput, 10);
-              if (!isNaN(contextWindow)) {
-                batchConfig.contextWindow = contextWindow;
-              }
-            }
-
-            const maxInput = await ctx.ui.input(
-              "Max output tokens (optional, e.g., 4096):",
-              ""
-            );
-            if (maxInput) {
-              const maxTokens = parseInt(maxInput, 10);
-              if (!isNaN(maxTokens)) {
-                batchConfig.maxTokens = maxTokens;
-              }
-            }
-          }
-
-          // Import selected models
-          for (const modelId of selectedModels) {
-            provider.models.push({
-              id: modelId,
-              name: modelId,
-              ...batchConfig,
-            });
-          }
-
-          if (saveConfig(config)) {
-            ctx.ui.notify(
-              `✓ Successfully imported ${selectedModels.length} model(s) to provider "${providerName}"`,
-              "success"
-            );
-          } else {
-            ctx.ui.notify("Failed to save configuration", "error");
-          }
-
-        } catch (error: any) {
-          if (error.name === "AbortError") {
-            ctx.ui.notify("Request timeout", "error");
-          } else {
-            ctx.ui.notify(`Error: ${error.message}`, "error");
-          }
-        }
-
-      } else {
-        ctx.ui.notify(
-          "Provider Management Commands:\n\n" +
-          "/provider add - Add provider (interactive)\n" +
-          "/provider list - List all providers\n" +
-          "/provider remove - Remove provider (interactive)\n" +
-          "/provider test - Test provider connection (interactive)\n" +
-          "/provider doctor - Run diagnostics\n" +
-          "/provider import-models - Import models from provider (interactive)\n\n" +
-          "APIs: openai-completions, anthropic-messages, google-generative-ai",
-          "info"
-        );
       }
     },
   });
 
-  // /add-model add <provider> <id> [name]
+  // Register /add-model command
   pi.registerCommand("add-model", {
     description: "Manage models for custom providers",
     handler: async (args, ctx) => {
       const parts = args?.trim().split(/\s+/) || [];
       const [action, ...rest] = parts;
 
-      if (action === "add") {
-        const config = loadConfig();
-        if (config === null) {
-          ctx.ui.notify("Failed to load models.json", "error");
-          return;
-        }
-
-        const providers = Object.keys(config.providers);
-
-        if (providers.length === 0) {
-          ctx.ui.notify("No providers configured. Add one first with /provider add", "error");
-          return;
-        }
-
-        // Interactive mode: prompt for each field
-        const providerName = await ctx.ui.select(
-          "Select provider:",
-          providers.map((p) => p)
-        );
-
-        if (!providerName) {
-          ctx.ui.notify("Cancelled", "info");
-          return;
-        }
-
-        const modelId = await ctx.ui.input("Model ID:", "");
-        if (!modelId) {
-          ctx.ui.notify("Model ID is required", "error");
-          return;
-        }
-
-        const modelName = await ctx.ui.input("Model Name (optional):", modelId);
-
-        // Advanced options
-        const addAdvanced = await ctx.ui.confirm(
-          "Configure advanced options (reasoning, compat, cost)?",
-          "Advanced options"
-        );
-
-        const modelConfig: ModelConfig = {
-          id: modelId,
-          name: modelName || modelId,
-        };
-
-        if (addAdvanced) {
-          // Reasoning support
-          const reasoning = await ctx.ui.confirm(
-            "Does this model support reasoning?",
-            "Reasoning support"
+      switch (action) {
+        case "add":
+          return handleModelAdd(ctx);
+        case "list":
+          return handleModelList(ctx, rest[0]);
+        case "remove":
+          return handleModelRemove(ctx);
+        default:
+          ctx.ui.notify(
+            "Model Management Commands:\n\n" +
+            "/add-model add - Add model (interactive)\n" +
+            "/add-model list [provider] - List models\n" +
+            "/add-model remove - Remove model (interactive)",
+            "info"
           );
-          if (reasoning) {
-            modelConfig.reasoning = true;
-          }
-
-          // Compatibility options
-          const needCompat = await ctx.ui.confirm(
-            "Does this model have compatibility issues (e.g., no developer role)?",
-            "Compatibility settings"
-          );
-
-          if (needCompat) {
-            const supportsDev = await ctx.ui.confirm(
-              "Does it support developer role?",
-              "Developer role"
-            );
-            const supportsReasoning = await ctx.ui.confirm(
-              "Does it support reasoning_effort parameter?",
-              "Reasoning effort"
-            );
-
-            modelConfig.compat = {
-              supportsDeveloperRole: supportsDev,
-              supportsReasoningEffort: supportsReasoning,
-            };
-          }
-
-          // Context window
-          const contextInput = await ctx.ui.input(
-            "Context window (optional, e.g., 128000):",
-            ""
-          );
-          if (contextInput) {
-            const contextWindow = parseInt(contextInput, 10);
-            if (!isNaN(contextWindow)) {
-              modelConfig.contextWindow = contextWindow;
-            }
-          }
-
-          // Max tokens
-          const maxInput = await ctx.ui.input(
-            "Max output tokens (optional, e.g., 4096):",
-            ""
-          );
-          if (maxInput) {
-            const maxTokens = parseInt(maxInput, 10);
-            if (!isNaN(maxTokens)) {
-              modelConfig.maxTokens = maxTokens;
-            }
-          }
-        }
-
-        const provider = config.providers[providerName];
-        const existingIndex = provider.models.findIndex((m) => m.id === modelId);
-
-        if (existingIndex >= 0) {
-          const ok = await ctx.ui.confirm(
-            `Model "${modelId}" already exists. Overwrite?`,
-            "Overwrite?"
-          );
-          if (!ok) return;
-          provider.models[existingIndex] = modelConfig;
-        } else {
-          provider.models.push(modelConfig);
-        }
-
-        if (saveConfig(config)) {
-          ctx.ui.notify(`✓ Model "${modelId}" added to provider "${providerName}"`, "success");
-        } else {
-          ctx.ui.notify("Failed to save configuration", "error");
-        }
-
-      } else if (action === "list") {
-        const [providerName] = rest;
-        const config = loadConfig();
-
-        if (config === null) {
-          ctx.ui.notify("Failed to load models.json", "error");
-          return;
-        }
-
-        if (providerName) {
-          const provider = config.providers[providerName];
-          if (!provider) {
-            ctx.ui.notify(`Provider "${providerName}" not found`, "error");
-            return;
-          }
-
-          if (provider.models.length === 0) {
-            ctx.ui.notify(`No models configured for provider "${providerName}"`, "info");
-            return;
-          }
-
-          let output = `Models for "${providerName}":\n\n`;
-          for (const model of provider.models) {
-            output += `• ${model.id}`;
-            if (model.name && model.name !== model.id) {
-              output += ` (${model.name})`;
-            }
-            if (model.reasoning) {
-              output += ` [reasoning]`;
-            }
-            if (model.compat) {
-              output += ` [compat]`;
-            }
-            output += "\n";
-          }
-          ctx.ui.notify(output, "info");
-        } else {
-          let output = "All Models:\n\n";
-          let hasModels = false;
-
-          for (const [name, provider] of Object.entries(config.providers)) {
-            if (provider.models.length > 0) {
-              hasModels = true;
-              output += `${name}:\n`;
-              for (const model of provider.models) {
-                output += `  • ${model.id}`;
-                if (model.name && model.name !== model.id) {
-                  output += ` (${model.name})`;
-                }
-                if (model.reasoning) {
-                  output += ` [reasoning]`;
-                }
-                output += "\n";
-              }
-              output += "\n";
-            }
-          }
-
-          if (!hasModels) {
-            ctx.ui.notify("No models configured", "info");
-            return;
-          }
-
-          ctx.ui.notify(output, "info");
-        }
-
-      } else if (action === "remove") {
-        const config = loadConfig();
-        if (config === null) {
-          ctx.ui.notify("Failed to load models.json", "error");
-          return;
-        }
-
-        const providers = Object.keys(config.providers);
-
-        if (providers.length === 0) {
-          ctx.ui.notify("No providers configured", "info");
-          return;
-        }
-
-        // Interactive mode: select provider first
-        const providerName = await ctx.ui.select(
-          "Select provider:",
-          providers.map((p) => p)
-        );
-
-        if (!providerName) {
-          ctx.ui.notify("Cancelled", "info");
-          return;
-        }
-
-        const provider = config.providers[providerName];
-
-        if (provider.models.length === 0) {
-          ctx.ui.notify(`No models in provider "${providerName}"`, "info");
-          return;
-        }
-
-        // Select model to remove
-        const modelId = await ctx.ui.select(
-          "Select model to remove:",
-          provider.models.map((m) => m.id)
-        );
-
-        if (!modelId) {
-          ctx.ui.notify("Cancelled", "info");
-          return;
-        }
-
-        const ok = await ctx.ui.confirm(
-          `Delete model "${modelId}" from provider "${providerName}"?`,
-          "Confirm deletion"
-        );
-
-        if (!ok) return;
-
-        const index = provider.models.findIndex((m) => m.id === modelId);
-
-        if (index < 0) {
-          ctx.ui.notify(`Model "${modelId}" not found in provider "${providerName}"`, "error");
-          return;
-        }
-
-        provider.models.splice(index, 1);
-
-        if (saveConfig(config)) {
-          ctx.ui.notify(`✓ Model "${modelId}" removed from provider "${providerName}"`, "success");
-        } else {
-          ctx.ui.notify("Failed to save configuration", "error");
-        }
-
-      } else {
-        ctx.ui.notify(
-          "Model Management Commands:\n\n" +
-          "/add-model add - Add model (interactive)\n" +
-          "/add-model list [provider] - List models\n" +
-          "/add-model remove - Remove model (interactive)",
-          "info"
-        );
       }
     },
   });
