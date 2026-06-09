@@ -862,10 +862,87 @@ async function handleModelAdd(ctx: any): Promise<void> {
     return;
   }
 
-  const modelId = await ctx.ui.input("Model ID:", "");
-  if (!modelId) {
-    ctx.ui.notify("Model ID is required", "error");
-    return;
+  const provider = config.providers[providerName];
+
+  let modelId: string;
+  let discoveredModels: string[] = [];
+
+  // For OpenAI-compatible APIs, offer to fetch models
+  if (provider.api === "openai-completions") {
+    const addMethod = await ctx.ui.select("How to add model?", [
+      "Fetch from provider (discover available models)",
+      "Enter manually",
+    ]);
+
+    if (!addMethod) {
+      ctx.ui.notify("Cancelled", "info");
+      return;
+    }
+
+    if (addMethod.startsWith("Fetch from provider")) {
+      // Fetch models from provider
+      ctx.ui.notify(`Fetching models from ${provider.baseUrl}...`, "info");
+
+      let apiKey = provider.apiKey;
+      if (apiKey.startsWith("$")) {
+        const envVar = apiKey.slice(1);
+        apiKey = process.env[envVar] || "";
+        if (!apiKey) {
+          ctx.ui.notify(`Environment variable ${envVar} is not set`, "error");
+          return;
+        }
+      }
+
+      try {
+        const response = await fetch(`${provider.baseUrl}/models`, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (!response.ok) {
+          ctx.ui.notify(`Failed to fetch models: HTTP ${response.status}`, "error");
+          return;
+        }
+
+        const data = await response.json();
+        const models = data.data || [];
+
+        if (models.length === 0) {
+          ctx.ui.notify("No models found, falling back to manual input", "warning");
+        } else {
+          discoveredModels = models.map((m: any) => m.id).sort();
+
+          const selectedModel = await ctx.ui.select(
+            `Select model from ${providerName} (${discoveredModels.length} available):`,
+            discoveredModels
+          );
+
+          if (!selectedModel) {
+            ctx.ui.notify("Cancelled", "info");
+            return;
+          }
+
+          modelId = selectedModel;
+        }
+      } catch (error: any) {
+        if (error.name === "AbortError") {
+          ctx.ui.notify("Request timeout, falling back to manual input", "warning");
+        } else {
+          ctx.ui.notify(`Error fetching models: ${error.message}`, "error");
+          return;
+        }
+      }
+    }
+  }
+
+  // Manual input fallback (or for non-OpenAI APIs)
+  if (!modelId!) {
+    const inputModelId = await ctx.ui.input("Model ID:", "");
+    if (!inputModelId) {
+      ctx.ui.notify("Model ID is required", "error");
+      return;
+    }
+    modelId = inputModelId;
   }
 
   const modelName = await ctx.ui.input("Model Name (optional):", modelId);
@@ -963,8 +1040,9 @@ async function handleModelAdd(ctx: any): Promise<void> {
     }
   }
 
-  const provider = config.providers[providerName];
-  const existingIndex = provider.models.findIndex((m) => m.id === modelId);
+  // Re-load provider (config might have been updated in scope)
+  const currentProvider = config.providers[providerName];
+  const existingIndex = currentProvider.models.findIndex((m) => m.id === modelId);
 
   if (existingIndex >= 0) {
     const ok = await ctx.ui.confirm(
@@ -972,9 +1050,9 @@ async function handleModelAdd(ctx: any): Promise<void> {
       "Overwrite?"
     );
     if (!ok) return;
-    provider.models[existingIndex] = modelConfig;
+    currentProvider.models[existingIndex] = modelConfig;
   } else {
-    provider.models.push(modelConfig);
+    currentProvider.models.push(modelConfig);
   }
 
   if (saveConfig(config)) {
