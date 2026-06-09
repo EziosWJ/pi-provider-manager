@@ -15,8 +15,13 @@ Interactive provider and model manager for [pi coding agent](https://github.com/
 🏥 **Health Check** - Built-in diagnostics with `/provider doctor`  
 ⚡ **Real Testing** - Tests both `/models` and `/chat/completions` endpoints  
 🎯 **Advanced Config** - Reasoning, compat, context window settings  
-🚀 **Model Discovery** - Auto-import models from providers with `/provider import-models`  
+🔍 **Model Discovery** - Fetch models from provider when adding  
+🤖 **Smart Sync** - Auto-configure with OpenRouter when syncing  
+📋 **Metadata Display** - Show model owner/organization info  
+🚀 **Auto-Import** - Bulk import models from providers with `/provider import-models`  
 ✏️ **Edit Models** - Modify model configurations after import with `/add-model edit`  
+🔄 **Backup/Restore** - Export and import provider configs  
+🧹 **Bulk Operations** - Clear all models from provider  
 🔍 **Smart Filtering** - Keyword filter for large model lists  
 ⚡ **Tag Mode** - Fast y/n/s selection for model import
 
@@ -75,6 +80,18 @@ Health check for your configuration:
 - Shows timestamped backup history (keeps 10 most recent)
 - Reports configuration issues
 
+#### `/provider clear-models` - Clear all models from provider
+Remove all models from a selected provider (interactive confirmation required).
+
+#### `/provider export` - Export provider config to JSON file
+Export one or all provider configurations to a JSON file for backup or sharing.
+
+#### `/provider import` - Import provider config from JSON file
+Import provider configurations from a previously exported JSON file.
+
+#### `/provider sync` - Sync models with provider
+Synchronize models with the provider (add new models, remove deleted ones). For OpenRouter, automatically applies default configuration.
+
 #### `/provider import-models` - Auto-discover and import models
 Automatically fetch and import models from OpenAI-compatible providers:
 - Fetches available models from `/models` endpoint
@@ -83,6 +100,7 @@ Automatically fetch and import models from OpenAI-compatible providers:
 - Three import modes: "Import all" / "Tag mode" / "Cancel"
 - Three configuration modes:
   - **Use defaults** - Quick import without configuration
+  - **Use OpenRouter defaults** - Auto-configure with OpenRouter metadata (model owner, context window, pricing, etc.)
   - **Batch config** - Same settings for all selected models
   - **Individual config** - Configure each model separately
 
@@ -91,6 +109,7 @@ Automatically fetch and import models from OpenAI-compatible providers:
 #### `/add-model add` - Add a model to a provider
 Interactive prompts:
 - Select provider (from configured list)
+- **Model discovery option** - Fetch available models from provider or enter manually
 - Model ID (e.g., `gpt-4`, `llama3.1:8b`)
 - Model name (optional display name)
 - **Advanced options** (optional):
@@ -115,6 +134,9 @@ Interactive editor for modifying model settings:
   - Max output tokens
   - Compatibility settings
 - Can clear optional fields
+
+#### `/add-model clone` - Clone a model
+Clone an existing model to the same or different provider with a new model ID.
 
 #### `/add-model remove` - Remove a model
 Interactive prompts:
@@ -145,13 +167,22 @@ export OLLAMA_API_KEY=ollama
 ```bash
 /add-model add
 # Select provider: ollama
+# Choose input method:
+#   → Fetch from provider (discover available models)
+#   → Enter manually
+# [Select: Enter manually]
 # Model ID: llama3.1:8b
 # Model Name: Llama 3.1 8B
 # Configure advanced options? No
 
 /add-model add
 # Select provider: ollama
-# Model ID: qwen2.5-coder:7b
+# Choose input method:
+#   → Fetch from provider (discover available models)
+#   → Enter manually
+# [Select: Fetch from provider]
+# Fetching models from ollama...
+# Select a model: qwen2.5-coder:7b
 # Model Name: Qwen 2.5 Coder 7B
 # Configure advanced options? Yes
 # Does this model support reasoning? Yes
@@ -271,6 +302,78 @@ export OLLAMA_API_KEY=ollama
 # 
 # [Select: Done]
 # ✓ Model "llama3.1:8b" updated successfully
+```
+
+### Clone a Model
+
+```bash
+/add-model clone
+# Select source provider: ollama
+# Select model to clone: llama3.1:8b
+# Clone to same provider or different?
+#   → Same provider (ollama)
+#   → Different provider
+# [Select: Same provider]
+# New model ID: llama3.1:8b-custom
+# ✓ Model cloned successfully
+```
+
+### Sync Models with Provider
+
+```bash
+/provider sync
+# Select provider to sync: openrouter
+# Syncing models with openrouter...
+# Fetching models from provider...
+# Found 5 new model(s) and 2 deleted model(s)
+# 
+# New models to add:
+#   • anthropic/claude-opus-4
+#   • google/gemini-2.0-flash
+#   ... and 3 more
+# 
+# Models to remove (no longer available):
+#   • old-model-1
+#   • old-model-2
+# 
+# Proceed with sync? Yes
+# Applying OpenRouter defaults for new models...
+# ✓ Added 5 new model(s)
+# ✓ Removed 2 deleted model(s)
+# ✓ Sync completed successfully
+```
+
+### Export and Import Provider Config
+
+```bash
+# Export a single provider
+/provider export
+# Select provider to export: ollama
+# Export file path: ./ollama-config.json
+# ✓ Provider "ollama" exported to ./ollama-config.json
+
+# Export all providers
+/provider export
+# Select provider to export: [All providers]
+# Export file path: ./all-providers.json
+# ✓ All providers exported to ./all-providers.json
+
+# Import provider config
+/provider import
+# Import file path: ./ollama-config.json
+# Found 1 provider(s) in file
+# Provider "ollama" already exists. Overwrite? Yes
+# ✓ Provider "ollama" imported successfully
+```
+
+### Clear All Models from Provider
+
+```bash
+/provider clear-models
+# Select provider: ollama
+# This will remove all 17 model(s) from provider "ollama"
+# Are you sure? Yes
+# ✓ Cleared all models from provider "ollama"
 ```
 
 ### Run Diagnostics

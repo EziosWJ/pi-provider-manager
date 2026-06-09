@@ -15,8 +15,13 @@
 🏥 **상태 확인** - `/provider doctor`를 통한 내장 진단  
 ⚡ **실제 테스트** - `/models`와 `/chat/completions` 두 엔드포인트 모두 테스트  
 🎯 **고급 설정** - 추론, 호환성, 컨텍스트 윈도우 설정  
-🚀 **모델 검색** - `/provider import-models`로 프로바이더에서 모델 자동 가져오기  
+🔍 **모델 검색** - 추가 시 프로바이더에서 모델 가져오기  
+🤖 **스마트 동기화** - 동기화 시 OpenRouter로 자동 설정  
+📋 **메타데이터 표시** - 모델 소유자/조직 정보 표시  
+🚀 **자동 가져오기** - `/provider import-models`로 프로바이더에서 모델 일괄 가져오기  
 ✏️ **모델 편집** - `/add-model edit`로 가져온 후 모델 설정 수정  
+🔄 **백업/복원** - 프로바이더 설정 내보내기 및 가져오기  
+🧹 **일괄 작업** - 프로바이더에서 모든 모델 지우기  
 🔍 **스마트 필터링** - 대규모 모델 목록을 위한 키워드 필터  
 ⚡ **태그 모드** - y/n/s를 사용한 빠른 모델 선택
 
@@ -68,14 +73,34 @@ Use /provider or /add-model to manage configurations
 - 인증 및 응답 검증
 - 상세한 테스트 결과 및 오류 메시지 표시
 
+#### `/provider doctor` - 진단 실행
+설정 상태 확인:
+- JSON 구조 검증
+- 환경 변수 확인
+- 타임스탬프가 있는 백업 기록 표시(최근 10개 유지)
+- 설정 문제 보고
+
+#### `/provider clear-models` - 프로바이더의 모든 모델 지우기
+선택한 프로바이더에서 모든 모델 제거(대화형 확인 필요).
+
+#### `/provider export` - 프로바이더 설정을 JSON 파일로 내보내기
+하나 또는 모든 프로바이더 설정을 JSON 파일로 내보내기(백업 또는 공유용).
+
+#### `/provider import` - JSON 파일에서 프로바이더 설정 가져오기
+이전에 내보낸 JSON 파일에서 프로바이더 설정 가져오기.
+
+#### `/provider sync` - 프로바이더와 모델 동기화
+프로바이더와 모델 동기화(새 모델 추가, 삭제된 모델 제거). OpenRouter의 경우 기본 설정 자동 적용.
+
 #### `/provider import-models` - 모델 자동 가져오기
 프로바이더에서 모델 자동 검색 및 가져오기:
 - `/models` 엔드포인트에서 사용 가능한 모델 가져오기
 - **키워드 필터**로 대규모 모델 목록 범위 좁히기
 - **태그 모드**(y/n/s)로 빠른 모델 선택
 - 3가지 가져오기 모드: "모두 가져오기" / "태그 모드" / "취소"
-- 3가지 설정 모드:
+- 4가지 설정 모드:
   - **기본값 사용** - 설정 없이 빠른 가져오기
+  - **OpenRouter 기본값 사용** - OpenRouter 메타데이터로 자동 설정(모델 소유자, 컨텍스트 윈도우, 가격 등)
   - **일괄 설정** - 선택한 모든 모델에 동일한 설정 적용
   - **개별 설정** - 각 모델을 개별적으로 설정
 
@@ -91,6 +116,7 @@ Use /provider or /add-model to manage configurations
 #### `/add-model add` - 프로바이더에 모델 추가
 대화형 프롬프트:
 - 프로바이더 선택 (구성된 목록에서)
+- **모델 검색 옵션** - 프로바이더에서 사용 가능한 모델 가져오기 또는 수동 입력
 - 모델 ID (예: `gpt-4`, `llama3.1:8b`)
 - 모델 이름 (선택적 표시 이름)
 - **고급 옵션** (선택사항):
@@ -115,6 +141,9 @@ Use /provider or /add-model to manage configurations
   - 최대 출력 토큰 수
   - 호환성 설정
 - 선택적 필드 지우기 가능
+
+#### `/add-model clone` - 모델 복제
+기존 모델을 같은 또는 다른 프로바이더에 새 모델 ID로 복제.
 
 #### `/add-model remove` - 모델 제거
 대화형 프롬프트:
@@ -145,13 +174,22 @@ export OLLAMA_API_KEY=ollama
 ```bash
 /add-model add
 # Select provider: ollama
+# 입력 방법 선택:
+#   → 프로바이더에서 가져오기 (사용 가능한 모델 검색)
+#   → 수동 입력
+# [선택: 수동 입력]
 # Model ID: llama3.1:8b
 # Model Name: Llama 3.1 8B
 # Configure advanced options? No
 
 /add-model add
 # Select provider: ollama
-# Model ID: qwen2.5-coder:7b
+# 입력 방법 선택:
+#   → 프로바이더에서 가져오기 (사용 가능한 모델 검색)
+#   → 수동 입력
+# [선택: 프로바이더에서 가져오기]
+# ollama에서 모델 가져오는 중...
+# 모델 선택: qwen2.5-coder:7b
 # Model Name: Qwen 2.5 Coder 7B
 # Configure advanced options? Yes
 # Does this model support reasoning? Yes
@@ -275,6 +313,78 @@ export OLLAMA_API_KEY=ollama
 # 
 # [Select: Done]
 # ✓ Model "llama3.1:8b" updated successfully
+```
+
+### 모델 복제
+
+```bash
+/add-model clone
+# 소스 프로바이더 선택: ollama
+# 복제할 모델 선택: llama3.1:8b
+# 같은 프로바이더 또는 다른 프로바이더로 복제?
+#   → 같은 프로바이더 (ollama)
+#   → 다른 프로바이더
+# [선택: 같은 프로바이더]
+# 새 모델 ID: llama3.1:8b-custom
+# ✓ 모델이 성공적으로 복제되었습니다
+```
+
+### 프로바이더와 모델 동기화
+
+```bash
+/provider sync
+# 동기화할 프로바이더 선택: openrouter
+# openrouter와 모델 동기화 중...
+# 프로바이더에서 모델 가져오는 중...
+# 5개의 새 모델과 2개의 삭제된 모델 발견
+# 
+# 추가할 새 모델:
+#   • anthropic/claude-opus-4
+#   • google/gemini-2.0-flash
+#   ... 그 외 3개
+# 
+# 제거할 모델 (더 이상 사용 불가):
+#   • old-model-1
+#   • old-model-2
+# 
+# 동기화를 진행하시겠습니까? 예
+# 새 모델에 OpenRouter 기본값 적용 중...
+# ✓ 5개의 새 모델 추가됨
+# ✓ 2개의 삭제된 모델 제거됨
+# ✓ 동기화가 성공적으로 완료되었습니다
+```
+
+### 프로바이더 설정 내보내기 및 가져오기
+
+```bash
+# 단일 프로바이더 내보내기
+/provider export
+# 내보낼 프로바이더 선택: ollama
+# 내보내기 파일 경로: ./ollama-config.json
+# ✓ 프로바이더 "ollama"를 ./ollama-config.json으로 내보냈습니다
+
+# 모든 프로바이더 내보내기
+/provider export
+# 내보낼 프로바이더 선택: [모든 프로바이더]
+# 내보내기 파일 경로: ./all-providers.json
+# ✓ 모든 프로바이더를 ./all-providers.json으로 내보냈습니다
+
+# 프로바이더 설정 가져오기
+/provider import
+# 가져오기 파일 경로: ./ollama-config.json
+# 파일에서 1개의 프로바이더 발견
+# 프로바이더 "ollama"가 이미 존재합니다. 덮어쓰시겠습니까? 예
+# ✓ 프로바이더 "ollama"를 성공적으로 가져왔습니다
+```
+
+### 프로바이더에서 모든 모델 지우기
+
+```bash
+/provider clear-models
+# 프로바이더 선택: ollama
+# 프로바이더 "ollama"에서 모든 17개의 모델을 제거합니다
+# 확실합니까? 예
+# ✓ 프로바이더 "ollama"에서 모든 모델을 지웠습니다
 ```
 
 ### 진단 실행

@@ -15,8 +15,13 @@ Gestor interactivo de proveedores y modelos para [pi coding agent](https://githu
 🏥 **Verificación de Salud** - Diagnóstico integrado con `/provider doctor`  
 ⚡ **Pruebas Reales** - Prueba tanto los endpoints `/models` como `/chat/completions`  
 🎯 **Configuración Avanzada** - Razonamiento, compatibilidad, configuración de ventana de contexto  
-🚀 **Descubrimiento de Modelos** - Auto-importar modelos desde proveedores con `/provider import-models`  
+🔍 **Descubrimiento de Modelos** - Obtener modelos del proveedor al añadir  
+🤖 **Sincronización Inteligente** - Auto-configurar con OpenRouter al sincronizar  
+📋 **Visualización de Metadatos** - Mostrar información del propietario/organización del modelo  
+🚀 **Auto-Importación** - Importar modelos en lote desde proveedores con `/provider import-models`  
 ✏️ **Editar Modelos** - Modificar configuraciones de modelos después de importar con `/add-model edit`  
+🔄 **Respaldo/Restauración** - Exportar e importar configuraciones de proveedores  
+🧹 **Operaciones en Lote** - Limpiar todos los modelos del proveedor  
 🔍 **Filtrado Inteligente** - Filtro por palabra clave para listas grandes de modelos  
 ⚡ **Modo de Etiquetado** - Selección rápida y/n/s para importar modelos
 
@@ -68,14 +73,34 @@ Realiza pruebas de conectividad completas:
 - Valida autenticación y respuesta
 - Muestra resultados de prueba detallados y mensajes de error
 
+#### `/provider doctor` - Ejecutar diagnósticos
+Verificación de salud de tu configuración:
+- Valida estructura JSON
+- Verifica variables de entorno
+- Muestra historial de respaldos con marca de tiempo (mantiene los 10 más recientes)
+- Reporta problemas de configuración
+
+#### `/provider clear-models` - Limpiar todos los modelos del proveedor
+Eliminar todos los modelos de un proveedor seleccionado (requiere confirmación interactiva).
+
+#### `/provider export` - Exportar configuración del proveedor a archivo JSON
+Exportar una o todas las configuraciones de proveedores a un archivo JSON para respaldo o compartir.
+
+#### `/provider import` - Importar configuración del proveedor desde archivo JSON
+Importar configuraciones de proveedores desde un archivo JSON exportado previamente.
+
+#### `/provider sync` - Sincronizar modelos con el proveedor
+Sincronizar modelos con el proveedor (añadir nuevos modelos, eliminar los eliminados). Para OpenRouter, aplica automáticamente la configuración predeterminada.
+
 #### `/provider import-models` - Auto-importar modelos
 Descubre e importa modelos automáticamente desde el proveedor:
 - Obtiene modelos disponibles desde el endpoint `/models`
 - **Filtro por palabra clave** para reducir listas grandes de modelos
 - **Modo de etiquetado** (y/n/s) para selección rápida de modelos
 - Tres modos de importación: "Importar todo" / "Modo de etiquetado" / "Cancelar"
-- Tres modos de configuración:
+- Cuatro modos de configuración:
   - **Usar valores predeterminados** - Importación rápida sin configuración
+  - **Usar valores predeterminados de OpenRouter** - Auto-configurar con metadatos de OpenRouter (propietario del modelo, ventana de contexto, precios, etc.)
   - **Configuración por lotes** - Mismos ajustes para todos los modelos seleccionados
   - **Configuración individual** - Configurar cada modelo por separado
 
@@ -91,6 +116,7 @@ Verificación de salud de tu configuración:
 #### `/add-model add` - Añadir modelo a un proveedor
 Indicaciones interactivas:
 - Seleccionar proveedor (de la lista configurada)
+- **Opción de descubrimiento de modelos** - Obtener modelos disponibles del proveedor o ingresar manualmente
 - ID del modelo (ej: `gpt-4`, `llama3.1:8b`)
 - Nombre del modelo (nombre de visualización opcional)
 - **Opciones avanzadas** (opcional):
@@ -115,6 +141,9 @@ Editor interactivo para modificar ajustes de modelos:
   - Tokens máximos de salida
   - Configuración de compatibilidad
 - Puede limpiar campos opcionales
+
+#### `/add-model clone` - Clonar un modelo
+Clonar un modelo existente al mismo o diferente proveedor con un nuevo ID de modelo.
 
 #### `/add-model remove` - Eliminar modelo
 Indicaciones interactivas:
@@ -145,13 +174,22 @@ export OLLAMA_API_KEY=ollama
 ```bash
 /add-model add
 # Select provider: ollama
+# Elegir método de entrada:
+#   → Obtener del proveedor (descubrir modelos disponibles)
+#   → Ingresar manualmente
+# [Seleccionar: Ingresar manualmente]
 # Model ID: llama3.1:8b
 # Model Name: Llama 3.1 8B
 # Configure advanced options? No
 
 /add-model add
 # Select provider: ollama
-# Model ID: qwen2.5-coder:7b
+# Elegir método de entrada:
+#   → Obtener del proveedor (descubrir modelos disponibles)
+#   → Ingresar manualmente
+# [Seleccionar: Obtener del proveedor]
+# Obteniendo modelos de ollama...
+# Seleccionar un modelo: qwen2.5-coder:7b
 # Model Name: Qwen 2.5 Coder 7B
 # Configure advanced options? Yes
 # Does this model support reasoning? Yes
@@ -275,6 +313,78 @@ export OLLAMA_API_KEY=ollama
 # 
 # [Select: Done]
 # ✓ Model "llama3.1:8b" updated successfully
+```
+
+### Clonar un Modelo
+
+```bash
+/add-model clone
+# Seleccionar proveedor de origen: ollama
+# Seleccionar modelo a clonar: llama3.1:8b
+# ¿Clonar al mismo proveedor o a uno diferente?
+#   → Mismo proveedor (ollama)
+#   → Proveedor diferente
+# [Seleccionar: Mismo proveedor]
+# Nuevo ID de modelo: llama3.1:8b-custom
+# ✓ Modelo clonado exitosamente
+```
+
+### Sincronizar Modelos con el Proveedor
+
+```bash
+/provider sync
+# Seleccionar proveedor a sincronizar: openrouter
+# Sincronizando modelos con openrouter...
+# Obteniendo modelos del proveedor...
+# Se encontraron 5 modelo(s) nuevo(s) y 2 modelo(s) eliminado(s)
+# 
+# Nuevos modelos a añadir:
+#   • anthropic/claude-opus-4
+#   • google/gemini-2.0-flash
+#   ... y 3 más
+# 
+# Modelos a eliminar (ya no disponibles):
+#   • old-model-1
+#   • old-model-2
+# 
+# ¿Proceder con la sincronización? Sí
+# Aplicando valores predeterminados de OpenRouter para nuevos modelos...
+# ✓ Se añadieron 5 modelo(s) nuevo(s)
+# ✓ Se eliminaron 2 modelo(s) eliminado(s)
+# ✓ Sincronización completada exitosamente
+```
+
+### Exportar e Importar Configuración de Proveedor
+
+```bash
+# Exportar un solo proveedor
+/provider export
+# Seleccionar proveedor a exportar: ollama
+# Ruta del archivo de exportación: ./ollama-config.json
+# ✓ Proveedor "ollama" exportado a ./ollama-config.json
+
+# Exportar todos los proveedores
+/provider export
+# Seleccionar proveedor a exportar: [Todos los proveedores]
+# Ruta del archivo de exportación: ./all-providers.json
+# ✓ Todos los proveedores exportados a ./all-providers.json
+
+# Importar configuración de proveedor
+/provider import
+# Ruta del archivo de importación: ./ollama-config.json
+# Se encontró(aron) 1 proveedor(es) en el archivo
+# El proveedor "ollama" ya existe. ¿Sobrescribir? Sí
+# ✓ Proveedor "ollama" importado exitosamente
+```
+
+### Limpiar Todos los Modelos del Proveedor
+
+```bash
+/provider clear-models
+# Seleccionar proveedor: ollama
+# Esto eliminará todos los 17 modelo(s) del proveedor "ollama"
+# ¿Está seguro? Sí
+# ✓ Se limpiaron todos los modelos del proveedor "ollama"
 ```
 
 ### Ejecutar Diagnósticos

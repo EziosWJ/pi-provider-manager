@@ -15,8 +15,13 @@
 🏥 **健康检查** - 使用 `/provider doctor` 进行内置诊断  
 ⚡ **真实测试** - 测试 `/models` 和 `/chat/completions` 两个端点  
 🎯 **高级配置** - 推理、兼容性、上下文窗口设置  
-🚀 **模型发现** - 使用 `/provider import-models` 从 provider 自动导入模型  
+🔍 **模型发现** - 添加时从 provider 获取模型  
+🤖 **智能同步** - 同步时自动配置 OpenRouter  
+📋 **元数据显示** - 显示模型所有者/组织信息  
+🚀 **自动导入** - 使用 `/provider import-models` 从 provider 批量导入模型  
 ✏️ **编辑模型** - 使用 `/add-model edit` 修改已导入模型的配置  
+🔄 **备份/恢复** - 导出和导入 provider 配置  
+🧹 **批量操作** - 清除 provider 的所有模型  
 🔍 **智能过滤** - 关键词过滤，处理大量模型列表  
 ⚡ **标签模式** - 快速 y/n/s 选择，用于模型导入
 
@@ -68,14 +73,34 @@ Use /provider or /add-model to manage configurations
 - 验证身份认证和响应
 - 显示详细的测试结果和错误信息
 
+#### `/provider doctor` - 运行诊断
+检查配置健康状况：
+- 验证 JSON 结构
+- 检查环境变量
+- 显示带时间戳的备份历史（保留最近 10 个）
+- 报告配置问题
+
+#### `/provider clear-models` - 清除 provider 的所有模型
+从选定的 provider 中删除所有模型（需要交互式确认）。
+
+#### `/provider export` - 导出 provider 配置到 JSON 文件
+将一个或所有 provider 配置导出到 JSON 文件，用于备份或共享。
+
+#### `/provider import` - 从 JSON 文件导入 provider 配置
+从之前导出的 JSON 文件导入 provider 配置。
+
+#### `/provider sync` - 与 provider 同步模型
+与 provider 同步模型（添加新模型，删除已删除的模型）。对于 OpenRouter，自动应用默认配置。
+
 #### `/provider import-models` - 自动导入模型
 从 provider 自动发现和导入模型：
 - 从 `/models` 端点获取可用模型
 - **关键词过滤**缩小大量模型列表范围
 - **标签模式**（y/n/s）快速选择模型
 - 三种导入模式："导入全部" / "标签模式" / "取消"
-- 三种配置模式：
+- 四种配置模式：
   - **使用默认值** - 快速导入，无需配置
+  - **使用 OpenRouter 默认值** - 使用 OpenRouter 元数据自动配置（模型所有者、上下文窗口、定价等）
   - **批量配置** - 为所有选定模型应用相同设置
   - **单独配置** - 分别配置每个模型
 
@@ -91,6 +116,7 @@ Use /provider or /add-model to manage configurations
 #### `/add-model add` - 添加模型到 provider
 交互式提示：
 - 选择 provider（从已配置列表中）
+- **模型发现选项** - 从 provider 获取可用模型或手动输入
 - 模型 ID（如 `gpt-4`、`llama3.1:8b`）
 - 模型名称（可选的显示名称）
 - **高级选项**（可选）：
@@ -115,6 +141,9 @@ Use /provider or /add-model to manage configurations
   - 最大输出 token 数
   - 兼容性设置
 - 可以清除可选字段
+
+#### `/add-model clone` - 克隆模型
+将现有模型克隆到相同或不同的 provider，使用新的模型 ID。
 
 #### `/add-model remove` - 删除模型
 交互式提示：
@@ -145,13 +174,22 @@ export OLLAMA_API_KEY=ollama
 ```bash
 /add-model add
 # Select provider: ollama
+# 选择输入方式：
+#   → 从 provider 获取（发现可用模型）
+#   → 手动输入
+# [选择：手动输入]
 # Model ID: llama3.1:8b
 # Model Name: Llama 3.1 8B
 # Configure advanced options? No
 
 /add-model add
 # Select provider: ollama
-# Model ID: qwen2.5-coder:7b
+# 选择输入方式：
+#   → 从 provider 获取（发现可用模型）
+#   → 手动输入
+# [选择：从 provider 获取]
+# 正在从 ollama 获取模型...
+# 选择一个模型：qwen2.5-coder:7b
 # Model Name: Qwen 2.5 Coder 7B
 # Configure advanced options? Yes
 # Does this model support reasoning? Yes
@@ -275,6 +313,78 @@ export OLLAMA_API_KEY=ollama
 # 
 # [Select: Done]
 # ✓ Model "llama3.1:8b" updated successfully
+```
+
+### 克隆模型
+
+```bash
+/add-model clone
+# 选择源 provider：ollama
+# 选择要克隆的模型：llama3.1:8b
+# 克隆到相同还是不同的 provider？
+#   → 相同 provider（ollama）
+#   → 不同 provider
+# [选择：相同 provider]
+# 新模型 ID：llama3.1:8b-custom
+# ✓ 模型克隆成功
+```
+
+### 与 Provider 同步模型
+
+```bash
+/provider sync
+# 选择要同步的 provider：openrouter
+# 正在与 openrouter 同步模型...
+# 正在从 provider 获取模型...
+# 发现 5 个新模型和 2 个已删除的模型
+# 
+# 要添加的新模型：
+#   • anthropic/claude-opus-4
+#   • google/gemini-2.0-flash
+#   ... 还有 3 个
+# 
+# 要删除的模型（不再可用）：
+#   • old-model-1
+#   • old-model-2
+# 
+# 继续同步？是
+# 为新模型应用 OpenRouter 默认值...
+# ✓ 添加了 5 个新模型
+# ✓ 删除了 2 个已删除的模型
+# ✓ 同步成功完成
+```
+
+### 导出和导入 Provider 配置
+
+```bash
+# 导出单个 provider
+/provider export
+# 选择要导出的 provider：ollama
+# 导出文件路径：./ollama-config.json
+# ✓ Provider "ollama" 已导出到 ./ollama-config.json
+
+# 导出所有 provider
+/provider export
+# 选择要导出的 provider：[所有 provider]
+# 导出文件路径：./all-providers.json
+# ✓ 所有 provider 已导出到 ./all-providers.json
+
+# 导入 provider 配置
+/provider import
+# 导入文件路径：./ollama-config.json
+# 在文件中发现 1 个 provider
+# Provider "ollama" 已存在。覆盖？是
+# ✓ Provider "ollama" 导入成功
+```
+
+### 清除 Provider 的所有模型
+
+```bash
+/provider clear-models
+# 选择 provider：ollama
+# 这将从 provider "ollama" 删除所有 17 个模型
+# 确定吗？是
+# ✓ 已清除 provider "ollama" 的所有模型
 ```
 
 ### 运行诊断
