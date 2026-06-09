@@ -211,6 +211,59 @@ async function testProviderConnection(
   }
 }
 
+// ============================================================================
+// Model Info Fetching (OpenRouter)
+// ============================================================================
+
+interface ModelInfo {
+  contextWindow?: number;
+  maxTokens?: number;
+}
+
+async function fetchModelInfoFromOpenRouter(modelId: string): Promise<ModelInfo | null> {
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/models", {
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    const models = data.data || [];
+
+    // Try exact match first
+    let model = models.find((m: any) => m.id === modelId);
+
+    // Try fuzzy match if exact match fails
+    if (!model) {
+      const normalizedId = modelId.toLowerCase().replace(/[:\-_]/g, "");
+      model = models.find((m: any) => {
+        const normalizedModelId = m.id.toLowerCase().replace(/[:\-_]/g, "");
+        return (
+          normalizedModelId.includes(normalizedId) ||
+          normalizedId.includes(normalizedModelId)
+        );
+      });
+    }
+
+    if (model) {
+      return {
+        contextWindow: model.context_length,
+        maxTokens: model.top_provider?.max_completion_tokens ||
+                   model.max_completion_tokens ||
+                   4096,
+      };
+    }
+
+    return null;
+  } catch (error) {
+    // Silently fail - network issues shouldn't block the user
+    return null;
+  }
+}
+
 // __CONTINUE_HERE__
 
 // ============================================================================
@@ -817,6 +870,24 @@ async function handleModelAdd(ctx: any): Promise<void> {
 
   const modelName = await ctx.ui.input("Model Name (optional):", modelId);
 
+  // Fetch model info from OpenRouter
+  ctx.ui.notify("Fetching model info from OpenRouter...", "info");
+  const modelInfo = await fetchModelInfoFromOpenRouter(modelId);
+
+  let suggestedContext: string | undefined;
+  let suggestedMaxTokens: string | undefined;
+
+  if (modelInfo) {
+    ctx.ui.notify(
+      `✓ Found model info:\n  Context: ${modelInfo.contextWindow || "N/A"}\n  Max output: ${modelInfo.maxTokens || "N/A"}`,
+      "success"
+    );
+    suggestedContext = modelInfo.contextWindow?.toString();
+    suggestedMaxTokens = modelInfo.maxTokens?.toString();
+  } else {
+    ctx.ui.notify("⚠ Model info not found in OpenRouter, using manual input", "warning");
+  }
+
   const addAdvanced = await ctx.ui.confirm(
     "Configure advanced options (reasoning, compat, context window)?",
     "Advanced options"
@@ -858,8 +929,10 @@ async function handleModelAdd(ctx: any): Promise<void> {
     }
 
     const contextInput = await ctx.ui.input(
-      "Context window (optional, e.g., 128000):",
-      ""
+      suggestedContext
+        ? `Context window (${suggestedContext}):`
+        : "Context window (optional, e.g., 128000):",
+      suggestedContext || ""
     );
     if (contextInput) {
       const contextWindow = parseInt(contextInput, 10);
@@ -869,14 +942,24 @@ async function handleModelAdd(ctx: any): Promise<void> {
     }
 
     const maxInput = await ctx.ui.input(
-      "Max output tokens (optional, e.g., 4096):",
-      ""
+      suggestedMaxTokens
+        ? `Max output tokens (${suggestedMaxTokens}):`
+        : "Max output tokens (optional, e.g., 4096):",
+      suggestedMaxTokens || ""
     );
     if (maxInput) {
       const maxTokens = parseInt(maxInput, 10);
       if (!isNaN(maxTokens)) {
         modelConfig.maxTokens = maxTokens;
       }
+    }
+  } else if (modelInfo) {
+    // Auto-fill with OpenRouter data if user skips advanced options
+    if (modelInfo.contextWindow) {
+      modelConfig.contextWindow = modelInfo.contextWindow;
+    }
+    if (modelInfo.maxTokens) {
+      modelConfig.maxTokens = modelInfo.maxTokens;
     }
   }
 
