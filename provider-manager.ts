@@ -540,6 +540,118 @@ async function handleProviderDoctor(ctx: any): Promise<void> {
   ctx.ui.notify(report, "info");
 }
 
+async function handleProviderExport(ctx: any): Promise<void> {
+  const config = loadConfig();
+  if (config === null) {
+    ctx.ui.notify("Failed to load models.json", "error");
+    return;
+  }
+
+  const providers = Object.keys(config.providers);
+
+  if (providers.length === 0) {
+    ctx.ui.notify("No providers configured", "info");
+    return;
+  }
+
+  const providerName = await ctx.ui.select("Select provider to export:", providers);
+
+  if (!providerName) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const fileName = await ctx.ui.input(
+    "Export file name:",
+    `${providerName}-export.json`
+  );
+
+  if (!fileName) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const exportData = {
+    provider: providerName,
+    config: config.providers[providerName],
+    exportedAt: new Date().toISOString(),
+    version: "1.0",
+  };
+
+  try {
+    const exportPath = path.resolve(process.cwd(), fileName);
+    fs.writeFileSync(exportPath, JSON.stringify(exportData, null, 2), "utf-8");
+    ctx.ui.notify(`✓ Exported provider "${providerName}" to ${exportPath}`, "success");
+  } catch (error: any) {
+    ctx.ui.notify(`Failed to export: ${error.message}`, "error");
+  }
+}
+
+async function handleProviderImport(ctx: any): Promise<void> {
+  const fileName = await ctx.ui.input("Import file path:", "");
+
+  if (!fileName) {
+    ctx.ui.notify("Cancelled", "info");
+    return;
+  }
+
+  const importPath = path.resolve(process.cwd(), fileName);
+
+  if (!fs.existsSync(importPath)) {
+    ctx.ui.notify(`File not found: ${importPath}`, "error");
+    return;
+  }
+
+  try {
+    const content = fs.readFileSync(importPath, "utf-8");
+    const importData = JSON.parse(content);
+
+    if (!importData.provider || !importData.config) {
+      ctx.ui.notify("Invalid export file format", "error");
+      return;
+    }
+
+    const config = loadConfig();
+    if (config === null) {
+      ctx.ui.notify("Failed to load models.json", "error");
+      return;
+    }
+
+    let providerName = importData.provider;
+
+    // Check if provider already exists
+    if (config.providers[providerName]) {
+      const overwrite = await ctx.ui.confirm(
+        `Provider "${providerName}" already exists. Overwrite?`,
+        "Overwrite?"
+      );
+
+      if (!overwrite) {
+        // Ask for new name
+        const newName = await ctx.ui.input("Enter new provider name:", `${providerName}-imported`);
+        if (!newName) {
+          ctx.ui.notify("Cancelled", "info");
+          return;
+        }
+        providerName = newName;
+      }
+    }
+
+    config.providers[providerName] = importData.config;
+
+    if (saveConfig(config)) {
+      ctx.ui.notify(
+        `✓ Imported provider "${providerName}" with ${importData.config.models.length} model(s)`,
+        "success"
+      );
+    } else {
+      ctx.ui.notify("Failed to save configuration", "error");
+    }
+  } catch (error: any) {
+    ctx.ui.notify(`Failed to import: ${error.message}`, "error");
+  }
+}
+
 // __CONTINUE_HERE_2__
 
 async function handleProviderImportModels(ctx: any): Promise<void> {
@@ -1512,6 +1624,10 @@ export default function (pi: ExtensionAPI) {
           return handleProviderDoctor(ctx);
         case "import-models":
           return handleProviderImportModels(ctx);
+        case "export":
+          return handleProviderExport(ctx);
+        case "import":
+          return handleProviderImport(ctx);
         default:
           ctx.ui.notify(
             "Provider Management Commands:\n\n" +
@@ -1520,7 +1636,9 @@ export default function (pi: ExtensionAPI) {
             "/provider remove - Remove provider (interactive)\n" +
             "/provider test - Test provider connection (interactive)\n" +
             "/provider doctor - Run diagnostics\n" +
-            "/provider import-models - Import models from provider (interactive)\n\n" +
+            "/provider import-models - Import models from provider (interactive)\n" +
+            "/provider export - Export provider config to JSON file\n" +
+            "/provider import - Import provider config from JSON file\n\n" +
             "APIs: openai-completions, anthropic-messages, google-generative-ai",
             "info"
           );
